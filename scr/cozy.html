@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Эбру — Рисовалка в стиле турецкой водной живописи</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background:#0a1a2e; color:#fff; overflow:hidden;
+            height:100vh; display:flex; flex-direction:column;
+        }
+        header {
+            padding:15px 20px; background:rgba(0,0,0,0.4); text-align:center;
+            font-size:1.5em; letter-spacing:1px; text-shadow:0 0 10px rgba(255,255,255,0.3);
+        }
+        #container { flex:1; display:flex; position:relative; overflow:hidden; }
+        #water-canvas { position:absolute; inset:0; width:100%; height:100%; background:#001122; }
+        #drawing-canvas {
+            position:absolute; inset:0; width:100%; height:100%;
+            mix-blend-mode:normal; opacity:1; cursor:crosshair;
+            touch-action:none;
+        }
+        #controls {
+            position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+            background:rgba(0,0,0,0.6); padding:12px 20px; border-radius:16px;
+            display:flex; gap:12px; align-items:center; backdrop-filter:blur(10px);
+            box-shadow:0 8px 32px rgba(0,0,0,0.3); flex-wrap:wrap; justify-content:center; z-index:10;
+        }
+        button {
+            background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); color:white; padding:8px 16px;
+            border-radius:10px; cursor:pointer; font-size:0.9em; transition:all 0.3s; backdrop-filter:blur(5px);
+        }
+        button:hover { background:rgba(255,255,255,0.3); transform:translateY(-2px); }
+        .color-btn {
+            width:30px; height:30px; border-radius:50%; border:2px solid rgba(255,255,255,0.4);
+            cursor:pointer; transition:all 0.3s; box-shadow:0 0 10px rgba(0,0,0,0.3);
+        }
+        .color-btn:hover { transform:scale(1.15); box-shadow:0 0 15px rgba(255,255,255,0.5); }
+        .color-btn.active { border:2px solid white; box-shadow:0 0 20px rgba(255,255,255,0.8); transform:scale(1.1); }
+
+        label { font-size:0.9em; opacity:0.95; display:flex; align-items:center; gap:6px; }
+        input[type="range"] { width:120px; }
+        #size-slider, #aspect-slider {
+            -webkit-appearance:none; height:6px; border-radius:3px; background:rgba(255,255,255,0.2); outline:none;
+        }
+
+        /* Видимость селекта: тёмный фон + белый текст, у options — классика */
+        select {
+            padding:6px 28px 6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.25);
+            color:#fff; background:rgba(0,0,0,0.55); outline:none; cursor:pointer;
+            appearance:none; position:relative;
+        }
+        /* стрелочка */
+        select::after { content:""; }
+        /* стили опций (поддержка зависит от браузера, но не повредит) */
+        option { color:#000; background:#fff; }
+
+        .control { display:flex; align-items:center; gap:6px; }
+        @media (max-width:768px) {
+            #controls { flex-direction:column; padding:15px; gap:12px; }
+            button, .color-btn { padding:10px; }
+            header { font-size:1.2em; }
+        }
+    </style>
+</head>
+<body>
+<header>Эбру — Водная живопись</header>
+
+<div id="container">
+    <canvas id="water-canvas"></canvas>
+    <canvas id="drawing-canvas"></canvas>
+</div>
+
+<div id="controls">
+    <div class="color-palette">
+        <div class="color-btn active" data-color="#ff3366" style="background:#ff3366;"></div>
+        <div class="color-btn" data-color="#33ccff" style="background:#33ccff;"></div>
+        <div class="color-btn" data-color="#ffcc33" style="background:#ffcc33;"></div>
+        <div class="color-btn" data-color="#66ff66" style="background:#66ff66;"></div>
+        <div class="color-btn" data-color="#ff66cc" style="background:#ff66cc;"></div>
+        <div class="color-btn" data-color="#ffffff" style="background:#ffffff;"></div>
+    </div>
+
+    <label>Размер:
+        <input type="range" id="size-slider" min="10" max="120" value="40">
+    </label>
+
+    <label>Форма:
+        <select id="brush-shape" title="Форма кисти">
+            <option value="circle" selected>Круг</option>
+            <option value="square">Квадрат</option>
+            <option value="ellipse">Эллипс</option>
+            <option value="teardrop">Капля</option>
+            <option value="star">Звезда</option>
+        </select>
+    </label>
+
+    <label>Вытянутость:
+        <input type="range" id="aspect-slider" min="1.0" max="3.0" step="0.1" value="1.6">
+    </label>
+
+    <label class="control" title="Ориентировать эллипс/каплю по траектории мазка">
+        <input type="checkbox" id="follow-angle" checked>
+        Следовать направлению
+    </label>
+
+    <button id="clear-btn">Очистить</button>
+    <button id="save-btn">Сохранить</button>
+</div>
+
+<script>
+    // === Канвасы ===
+    const waterCanvas = document.getElementById('water-canvas');
+    const drawCanvas  = document.getElementById('drawing-canvas');
+    const waterCtx = waterCanvas.getContext('2d');
+    const drawCtx  = drawCanvas.getContext('2d');
+
+    // === Состояние UI (текущие настройки кисти) ===
+    let width, height;
+    let isDrawing = false;
+    let currentColor = '#ff3366';
+    let brushSize = 40;
+    let brushShape = 'circle';
+    let brushAspect = 1.6;
+    let followAngle = true;
+
+    // мазок
+    let lastX = null, lastY = null, lastAngle = 0;
+
+    // Нарисованные элементы
+    let drops = [];
+
+    // Вязкость — влияет на рост и силу возмущения воды
+    const colorViscosities = {
+        '#ff3366': 1, '#33ccff': 2, '#ffcc33': 3,
+        '#66ff66': 4, '#ff66cc': 5, '#ffffff': 6
+    };
+
+    // === Волны (height map) ===
+    let cellSize = 4, gw = 0, gh = 0;
+    let hNow, hPrev, hNext;
+    const damping = 0.985, waveCoeff = 0.5;
+
+    function initWaveField() {
+        gw = Math.max(8, Math.floor(width  / cellSize));
+        gh = Math.max(8, Math.floor(height / cellSize));
+        const n = gw * gh;
+        hNow  = new Float32Array(n);
+        hPrev = new Float32Array(n);
+        hNext = new Float32Array(n);
+    }
+    function idx(x, y){ return y * gw + x; }
+
+    function disturb(px, py, rPx, strength) {
+        const gx = Math.floor(px / cellSize);
+        const gy = Math.floor(py / cellSize);
+        const r  = Math.max(1, Math.floor(rPx / cellSize));
+        const r2 = r*r;
+        for (let y = Math.max(1, gy - r); y < Math.min(gh - 1, gy + r); y++) {
+            for (let x = Math.max(1, gx - r); x < Math.min(gw - 1, gx + r); x++) {
+                const dx = x - gx, dy = y - gy;
+                const d2 = dx*dx + dy*dy;
+                if (d2 <= r2) {
+                    const falloff = 1 - d2 / r2;
+                    hNow[idx(x,y)] += strength * falloff;
+                }
+            }
+        }
+    }
+
+    function stepWaves() {
+        for (let y = 1; y < gh - 1; y++) {
+            const base = y * gw;
+            for (let x = 1; x < gw - 1; x++) {
+                const i = base + x;
+                const lap =
+                    hNow[i - 1] + hNow[i + 1] +
+                    hNow[i - gw] + hNow[i + gw] -
+                    4 * hNow[i];
+                hNext[i] = (2 * hNow[i] - hPrev[i]) + lap * waveCoeff;
+                hNext[i] *= damping;
+            }
+        }
+        let t = hPrev; hPrev = hNow; hNow = hNext; hNext = t;
+    }
+
+    function renderWater() {
+        const grad = waterCtx.createLinearGradient(0,0,0,height);
+        grad.addColorStop(0,'#001a33');
+        grad.addColorStop(1,'#00080f');
+        waterCtx.fillStyle = grad;
+        waterCtx.fillRect(0,0,width,height);
+
+        waterCtx.save();
+        for (let y = 1; y < gh - 1; y++) {
+            for (let x = 1; x < gw - 1; x++) {
+                const i = idx(x,y);
+                const dx = hNow[i + 1] - hNow[i - 1];
+                const dy = hNow[i + gw] - hNow[i - gw];
+
+                const nx = -dx, ny = -dy, nz = 1.0;
+                const invLen = 1 / Math.max(1e-6, Math.hypot(nx, ny, nz));
+                const nnx = nx * invLen, nny = ny * invLen, nnz = nz * invLen;
+
+                const lx = 0.4, ly = -0.6, lz = 1.0;
+                const lInv = 1 / Math.hypot(lx, ly, lz);
+                const lnx = lx * lInv, lny = ly * lInv, lnz = lz * lInv;
+
+                const ndotl = Math.max(0, nnx*lnx + nny*lny + nnz*lnz);
+                const spec  = Math.pow(ndotl, 16) * 0.9;
+                const lift  = hNow[i] * 200;
+
+                let r = 0  + ndotl*40 + spec*140 + lift*0.3;
+                let g = 26 + ndotl*70 + spec*160 + lift*0.2;
+                let b = 51 + ndotl*90 + spec*190 + lift*0.1;
+
+                r = Math.max(0, Math.min(255, r));
+                g = Math.max(0, Math.min(255, g));
+                b = Math.max(0, Math.min(255, b));
+
+                waterCtx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+                waterCtx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize);
+            }
+        }
+        waterCtx.restore();
+    }
+
+    function animateWater() {
+        stepWaves();
+        renderWater();
+        requestAnimationFrame(animateWater);
+    }
+
+    function resizeCanvas() {
+        width  = waterCanvas.width  = drawCanvas.width  = window.innerWidth;
+        height = waterCanvas.height = drawCanvas.height = window.innerHeight - document.querySelector('header').offsetHeight;
+
+        const targetPixels = 220000;
+        const area = width * height;
+        cellSize = Math.max(3, Math.min(8, Math.floor(Math.sqrt(area / targetPixels))));
+        initWaveField();
+        renderWater();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    animateWater();
+
+    // === Краска (поверх воды). Drop теперь хранит СВОИ shape/aspect/follow ===
+    class Drop {
+        constructor(x, y, color, size, angle, shape, aspect, follow) {
+            this.x = x; this.y = y; this.color = color; this.size = size;
+            this.angle = angle ?? 0;
+
+            // снимки параметров на момент рисования
+            this.shape = shape;
+            this.aspect = aspect;
+            this.follow = follow;
+
+            this.viscosity = colorViscosities[color] || 1;
+            this.maxSize = size * (4 / this.viscosity);
+            this.growth = 0;
+            this.growthSpeed = 0.8 / this.viscosity;
+        }
+        update() {
+            if (this.growth < this.maxSize) this.growth += this.growthSpeed;
+        }
+        draw() {
+            drawCtx.save();
+            drawCtx.globalCompositeOperation = 'source-over';
+            drawBrushShape(drawCtx, this.x, this.y, this.growth, this.color, this.angle, this.shape, this.aspect, this.follow);
+            drawCtx.restore();
+        }
+    }
+
+    function hexWithAlpha(hex, a255='FF') {
+        const h = hex.replace('#','');
+        return `#${h}${a255}`;
+    }
+
+    // ВНИМАНИЕ: используем переданные shape/aspect/follow вместо глобальных
+    function drawBrushShape(ctx, x, y, r, color, angleRad=0, shape='circle', aspect=1.0, follow=true) {
+        const solid = hexWithAlpha(color, 'FF');
+        const mid   = hexWithAlpha(color, 'F0');
+        const edge  = hexWithAlpha(color, '00');
+
+        switch (shape) {
+            case 'circle': {
+                const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+                g.addColorStop(0.00, solid);
+                g.addColorStop(0.70, mid);
+                g.addColorStop(1.00, edge);
+                ctx.fillStyle = g;
+                ctx.fillRect(x - r, y - r, r*2, r*2);
+                break;
+            }
+            case 'square': {
+                ctx.save();
+                ctx.beginPath();
+                const s = r * 1.4;
+                ctx.rect(x - s, y - s, s*2, s*2);
+                ctx.clip();
+                const g = ctx.createRadialGradient(x, y, 0, x, y, s * Math.SQRT2);
+                g.addColorStop(0.00, solid);
+                g.addColorStop(0.80, mid);
+                g.addColorStop(1.00, edge);
+                ctx.fillStyle = g;
+                ctx.fillRect(x - s, y - s, s*2, s*2);
+                ctx.restore();
+                break;
+            }
+            case 'ellipse': {
+                ctx.save();
+                ctx.translate(x, y);
+                if (follow) ctx.rotate(angleRad);
+                ctx.scale(1, aspect);
+                const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+                g.addColorStop(0.00, solid);
+                g.addColorStop(0.70, mid);
+                g.addColorStop(1.00, edge);
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+                break;
+            }
+            case 'teardrop': {
+                ctx.save();
+                ctx.translate(x, y);
+                if (follow) ctx.rotate(angleRad);
+                const tip = -r * aspect;
+                const base = r;
+                ctx.beginPath();
+                ctx.moveTo(0, tip);
+                ctx.quadraticCurveTo(base, tip*0.4, base*0.9, 0);
+                ctx.quadraticCurveTo(base*0.6, base*0.9, 0, base);
+                ctx.quadraticCurveTo(-base*0.6, base*0.9, -base*0.9, 0);
+                ctx.quadraticCurveTo(-base, tip*0.4, 0, tip);
+                ctx.closePath();
+                const lg = ctx.createLinearGradient(0, tip, 0, base);
+                lg.addColorStop(0.00, solid);
+                lg.addColorStop(0.70, mid);
+                lg.addColorStop(1.00, edge);
+                ctx.fillStyle = lg;
+                ctx.fill();
+                ctx.restore();
+                break;
+            }
+            case 'star': {
+                ctx.save();
+                ctx.translate(x, y);
+                if (follow) ctx.rotate(angleRad);
+                const spikes = 5;
+                const outerR = r;
+                const innerR = r * 0.45;
+                ctx.beginPath();
+                for (let i = 0; i < spikes; i++) {
+                    const a1 = (i * 2 * Math.PI) / spikes;
+                    const a2 = a1 + Math.PI / spikes;
+                    ctx.lineTo(Math.cos(a1)*outerR, Math.sin(a1)*outerR);
+                    ctx.lineTo(Math.cos(a2)*innerR, Math.sin(a2)*innerR);
+                }
+                ctx.closePath();
+                const g = ctx.createRadialGradient(0,0,0,0,0,outerR);
+                g.addColorStop(0.00, solid);
+                g.addColorStop(0.70, mid);
+                g.addColorStop(1.00, edge);
+                ctx.fillStyle = g;
+                ctx.fill();
+                ctx.restore();
+                break;
+            }
+        }
+    }
+
+    // ——— Непрерывный мазок с интерполяцией ———
+    function splatAt(x, y, size, color, angleRad) {
+        // Снимок текущих настроек для этой капли
+        const shape  = brushShape;
+        const aspect = brushAspect;
+        const follow = followAngle;
+
+        const d = new Drop(x, y, color, size, angleRad, shape, aspect, follow);
+        drops.push(d);
+
+        // Возмущаем воду (учтём вытянутость эллипса/капли)
+        const viscosity = colorViscosities[color] || 1;
+        const strength  = 0.6 / viscosity;
+        const shapeFactor = (shape === 'ellipse' || shape === 'teardrop') ? Math.max(1, aspect) : 1.0;
+        const disturbRadius = size * 0.6 * shapeFactor;
+        disturb(x, y, disturbRadius, strength);
+    }
+
+    function strokeTo(x, y) {
+        if (lastX == null || lastY == null) {
+            lastX = x; lastY = y;
+            splatAt(x, y, Number(brushSize) + Math.random()*10, currentColor, lastAngle);
+            return;
+        }
+        const dx = x - lastX;
+        const dy = y - lastY;
+        const dist = Math.hypot(dx, dy);
+        if (dist === 0) return;
+
+        const angle = Math.atan2(dy, dx);
+        lastAngle = angle;
+
+        const spacing = Math.max(1, Number(brushSize) * 0.35);
+        const steps = Math.ceil(dist / spacing);
+        const stepX = dx / steps;
+        const stepY = dy / steps;
+
+        for (let i = 1; i <= steps; i++) {
+            const px = lastX + stepX * i;
+            const py = lastY + stepY * i;
+            splatAt(px, py, Number(brushSize) + Math.random()*6, currentColor, angle);
+        }
+
+        lastX = x; lastY = y;
+    }
+
+    function getCanvasPos(evt) {
+        const rect = drawCanvas.getBoundingClientRect();
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    }
+
+    drawCanvas.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        drawCanvas.setPointerCapture(e.pointerId);
+        isDrawing = true;
+        const {x,y} = getCanvasPos(e);
+        lastX = x; lastY = y;
+        splatAt(x, y, Number(brushSize) + Math.random()*10, currentColor, lastAngle);
+    });
+
+    drawCanvas.addEventListener('pointermove', (e) => {
+        if (!isDrawing) return;
+        const {x,y} = getCanvasPos(e);
+        strokeTo(x, y);
+    });
+
+    function endStroke(e){
+        isDrawing = false;
+        lastX = lastY = null;
+        if (e && e.pointerId) {
+            try { drawCanvas.releasePointerCapture(e.pointerId); } catch(_) {}
+        }
+    }
+    drawCanvas.addEventListener('pointerup', endStroke);
+    drawCanvas.addEventListener('pointercancel', endStroke);
+    drawCanvas.addEventListener('pointerout', endStroke);
+    drawCanvas.addEventListener('pointerleave', endStroke);
+
+    // Рендер краски
+    function animateDrops() {
+        drawCtx.clearRect(0,0,width,height);
+        const sorted = drops.slice().sort((a,b)=> a.viscosity - b.viscosity);
+        for (const drop of sorted){ drop.update(); drop.draw(); }
+        requestAnimationFrame(animateDrops);
+    }
+    animateDrops();
+
+    // === UI ===
+    document.querySelectorAll('.color-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+            document.querySelector('.color-btn.active').classList.remove('active');
+            btn.classList.add('active');
+            currentColor = btn.dataset.color;
+        });
+    });
+
+    document.getElementById('size-slider').addEventListener('input', (e)=>{
+        brushSize = e.target.value;
+    });
+
+    document.getElementById('brush-shape').addEventListener('change', (e)=>{
+        brushShape = e.target.value;
+    });
+
+    document.getElementById('aspect-slider').addEventListener('input', (e)=>{
+        brushAspect = parseFloat(e.target.value);
+    });
+
+    document.getElementById('follow-angle').addEventListener('change', (e)=>{
+        followAngle = e.target.checked;
+    });
+
+    document.getElementById('clear-btn').addEventListener('click', ()=>{
+        drops = [];
+        if (hNow)  hNow.fill(0);
+        if (hPrev) hPrev.fill(0);
+        if (hNext) hNext.fill(0);
+        drawCtx.clearRect(0,0,width,height);
+    });
+
+    document.getElementById('save-btn').addEventListener('click', ()=>{
+        const link = document.createElement('a');
+        link.download = 'ebru-art-' + Date.now() + '.png';
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = width; finalCanvas.height = height;
+        const ctx = finalCanvas.getContext('2d');
+        ctx.drawImage(waterCanvas, 0, 0);
+        ctx.drawImage(drawCanvas, 0, 0);
+        link.href = finalCanvas.toDataURL();
+        link.click();
+    });
+
+    setTimeout(()=>{
+        alert('🛠️ Исправлено: старые мазки больше не меняют форму при переключении кисти. Селект стал читабельным.');
+    }, 600);
+</script>
+</body>
+</html>

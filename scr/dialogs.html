@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debate Roguelike: Logic Wars 5.0</title>
+    <style>
+        :root {
+            --bg-color: #0b0b10;
+            --panel-bg: #16161f;
+            --card-bg: #222233;
+            --accent: #ffcc00;
+            --text-main: #eee;
+            --highlight: #5c8aff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(135deg, #0b0b10 0%, #1a1a2e 100%);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 10px;
+            min-height: 100vh;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        .screen {
+            display: none;
+            width: 900px;
+            max-width: 100%;
+            min-height: 100vh;
+            flex-direction: column;
+            animation: fadeIn 0.5s;
+        }
+        .screen.active { display: flex; }
+
+        @keyframes fadeIn { from { opacity:0; transform: scale(0.95); } to { opacity:1; transform: scale(1); } }
+
+        #screen-story {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #000 100%);
+            position: relative;
+            padding: 20px;
+        }
+
+        .story-title {
+            font-size: 48px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ffcc00, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 30px rgba(255, 204, 0, 0.3);
+        }
+
+        .story-text {
+            font-size: 20px;
+            line-height: 1.8;
+            max-width: 700px;
+            color: #ddd;
+            margin-bottom: 30px;
+            font-family: 'Courier New', monospace;
+            min-height: 100px;
+            white-space: pre-wrap;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .story-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .skip-btn {
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #5c8aff 0%, #4a6fd4 100%);
+            color: #fff;
+            border: 2px solid #7aa3ff;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(92, 138, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .skip-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(92, 138, 255, 0.6);
+        }
+
+        .battle-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 15px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: rgba(22, 22, 31, 0.8);
+            border-radius: 8px;
+        }
+
+        .turn-counter {
+            font-size: 14px;
+            color: #888;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .turn-number {
+            background: #333;
+            padding: 4px 12px;
+            border-radius: 12px;
+            color: #ffcc00;
+            font-weight: bold;
+        }
+
+        .sound-btn {
+            padding: 8px 16px;
+            font-size: 16px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .sound-btn:hover { background: #444; }
+
+        .thesis-bar {
+            background: linear-gradient(135deg, #2a2a40 0%, #1f1f30 100%);
+            border-left: 5px solid #ff4d4d;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .thesis-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #ff9999;
+            letter-spacing: 2px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .thesis-text {
+            font-size: 19px;
+            font-weight: 600;
+            color: #fff;
+            font-style: italic;
+            line-height: 1.4;
+            padding-right: 140px;
+        }
+
+        .thesis-weakness {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #444 0%, #333 100%);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #777;
+            border: 1px solid #555;
+            font-weight: bold;
+        }
+
+        .stats-area {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            position: relative;
+        }
+
+        .char-panel {
+            flex: 1;
+            background: linear-gradient(135deg, var(--panel-bg) 0%, #1a1a28 100%);
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border: 1px solid #2a2a3a;
+            position: relative;
+        }
+
+        .bubble {
+            position: absolute;
+            top: -60px;
+            left: 20px;
+            right: 20px;
+            background: #fff;
+            color: #000;
+            padding: 10px 15px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .bubble:after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 30px;
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: #fff transparent;
+            display: block;
+            width: 0;
+        }
+
+        .bubble.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .char-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .char-name {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .enemy-name { color: #ff8888; }
+        .player-name { color: #88ccff; }
+
+        .hp-text {
+            font-size: 15px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .bar-wrap {
+            background: #1a1a24;
+            height: 14px;
+            border-radius: 7px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        .hp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b 0%, #ff4d4d 100%);
+            transition: width 0.4s;
+        }
+
+        .player-hp {
+            background: linear-gradient(90deg, #4dff88 0%, #3de070 100%);
+        }
+
+        .enemy-intent {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #bbb;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            border-left: 3px solid #ff6b6b;
+        }
+
+        .player-stats {
+            margin-top: 12px;
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .deck-info {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #888;
+            margin-top: 8px;
+        }
+
+        .deck-stat {
+            background: rgba(0,0,0,0.3);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        .hand-area {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            min-height: 240px;
+            align-items: flex-end;
+            padding: 15px 5px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            width: 160px;
+            height: 220px;
+            background: linear-gradient(135deg, var(--card-bg) 0%, #1a1a28 100%);
+            border: 2px solid #3a3a4a;
+            border-radius: 12px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .card:hover {
+            transform: translateY(-25px) scale(1.08);
+            z-index: 100;
+            border-color: var(--highlight);
+            box-shadow: 0 8px 25px rgba(92, 138, 255, 0.5);
+        }
+
+        .card-cat {
+            font-size: 10px;
+            text-transform: uppercase;
+            background: #000;
+            padding: 3px 8px;
+            border-radius: 4px;
+            align-self: flex-start;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .cat-astro { color: #aaddff; border: 1px solid #4488bb; }
+        .cat-phys { color: #ffaa55; border: 1px solid #bb6633; }
+        .cat-bio { color: #aaffaa; border: 1px solid #44aa44; }
+        .cat-logic { color: #dddddd; border: 1px solid #666; }
+        .cat-hist { color: #d4aaff; border: 1px solid #8844bb; }
+        .cat-def { color: #88ccff; border: 1px solid #4488bb; }
+
+        .card-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.3;
+            color: #fff;
+        }
+
+        .card-desc {
+            font-size: 11px;
+            color: #bbb;
+            flex-grow: 1;
+            line-height: 1.4;
+        }
+
+        .card-stats {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .card-stat-dmg { color: #ff6b6b; }
+        .card-stat-block { color: #5c8aff; }
+
+        .card-cost {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: linear-gradient(135deg, #ffcc00 0%, #ffaa00 100%);
+            color: #000;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 3px solid var(--card-bg);
+        }
+
+        #log {
+            height: 110px;
+            overflow-y: auto;
+            font-size: 13px;
+            color: #999;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            background: rgba(0,0,0,0.4);
+        }
+
+        .log-entry {
+            margin: 3px 0;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .log-crit {
+            color: #ffcc00;
+            font-weight: bold;
+            border-left: 3px solid gold;
+            background: rgba(255, 215, 0, 0.15);
+        }
+
+        .log-fail {
+            color: #ff5555;
+            font-weight: bold;
+            border-left: 3px solid #ff4444;
+            background: rgba(100, 0, 0, 0.2);
+        }
+
+        .log-player {
+            color: #88ccff;
+            background: rgba(136, 204, 255, 0.05);
+        }
+
+        .log-enemy {
+            color: #ff8888;
+            background: rgba(255, 136, 136, 0.05);
+        }
+
+        @keyframes critShake {
+            0%, 100% { transform: translate(0,0); }
+            10% { transform: translate(-8px, 8px) rotate(-1deg); }
+            30% { transform: translate(8px, -8px) rotate(1deg); }
+            50% { transform: translate(-4px, 4px); }
+        }
+
+        @keyframes failShake {
+            0%, 100% { transform: translate(0,0); }
+            15% { transform: translate(10px, 0); }
+            30% { transform: translate(-10px, 0); }
+            45% { transform: translate(10px, 0); }
+            60% { transform: translate(-10px, 0); }
+        }
+
+        @keyframes shamePulse {
+            0% { background: linear-gradient(135deg, #16161f 0%, #1a1a28 100%); }
+            50% { background: #330000; }
+            100% { background: linear-gradient(135deg, #16161f 0%, #1a1a28 100%); }
+        }
+
+        .crit-effect {
+            animation: critShake 0.6s ease-out;
+            border-color: gold !important;
+        }
+
+        .fail-effect {
+            animation: failShake 0.4s ease-out;
+            border-color: #ff4444 !important;
+        }
+
+        .shame-effect {
+            animation: shamePulse 0.5s ease-out;
+        }
+
+        .btn {
+            padding: 14px 35px;
+            background: linear-gradient(135deg, var(--highlight) 0%, #4a6fd4 100%);
+            border: none;
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .overlay-text {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: gold;
+            text-shadow: 0 0 30px gold;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.5s;
+            z-index: 1000;
+        }
+
+        #screen-end {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        #endTitle {
+            font-size: 56px;
+            margin-bottom: 25px;
+            background: linear-gradient(45deg, #ffcc00, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #endDesc {
+            font-size: 20px;
+            color: #bbb;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        @media (max-width: 768px) {
+            .card { width: 140px; height: 200px; }
+            .stats-area { flex-direction: column; }
+            .thesis-text { font-size: 16px; padding-right: 10px; }
+            .thesis-weakness { position: static; transform: none; margin-top: 10px; }
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="screen-story" class="screen active">
+    <div class="story-title">⚔️ LOGIC WARS ⚔️</div>
+    <div id="storyText" class="story-text"></div>
+    <div class="story-buttons">
+        <button class="skip-btn" id="startBtn">⚡ НАЧАТЬ СПОР ⚡</button>
+    </div>
+</div>
+
+<div id="screen-battle" class="screen">
+    <div class="battle-container">
+        <div class="top-bar">
+            <div class="turn-counter">
+                <span>🎯 Раунд</span>
+                <span class="turn-number" id="turnCount">1</span>
+            </div>
+            <button class="sound-btn" id="soundBtn">🔊 Звук</button>
+        </div>
+
+        <div class="thesis-bar" id="thesisBar">
+            <div class="thesis-label">📢 Тезис Оппонента</div>
+            <div class="thesis-text" id="enemyThesis">...</div>
+            <div class="thesis-weakness" id="thesisWeakness">Слабость: ???</div>
+        </div>
+
+        <div class="stats-area">
+            <div class="char-panel">
+                <div id="enemyBubble" class="bubble"></div>
+
+                <div class="char-header">
+                    <strong id="enemyName" class="char-name enemy-name">Враг</strong>
+                    <span id="enemyHpText" class="hp-text">HP</span>
+                </div>
+                <div class="bar-wrap"><div id="enemyHpBar" class="hp-fill"></div></div>
+                <div class="enemy-intent" id="enemyIntent">Намерение...</div>
+            </div>
+
+            <div class="char-panel" id="playerPanel">
+                <div class="char-header">
+                    <strong class="char-name player-name">🎓 Модератор</strong>
+                    <span id="playerHpText" class="hp-text">HP</span>
+                </div>
+                <div class="bar-wrap"><div id="playerHpBar" class="hp-fill player-hp"></div></div>
+                <div class="player-stats">
+                    <div>⚡ <span class="stat-value" id="energyVal" style="color:#ffcc00">3</span></div>
+                    <div>🛡️ <span class="stat-value" id="blockVal" style="color:#5c8aff">0</span></div>
+                </div>
+                <div class="deck-info">
+                    <div class="deck-stat">📚 <span id="deckCount">0</span></div>
+                    <div class="deck-stat">🗑️ <span id="discardCount">0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="log"></div>
+        <div class="hand-area" id="handArea"></div>
+
+        <div style="text-align:center;">
+            <button class="btn" id="endTurnBtn">✅ Закончить аргументацию</button>
+        </div>
+    </div>
+
+    <div id="critOverlay" class="overlay-text">💥 РАЗГРОМ ПО ФАКТАМ! 💥</div>
+</div>
+
+<div id="screen-end" class="screen">
+    <h1 id="endTitle">Победа!</h1>
+    <p id="endDesc"></p>
+    <button class="btn" id="restartBtn">🔄 Следующий оппонент</button>
+</div>
+
+<script>
+    let SOUND_ON = true;
+
+    const CAT = {
+        ASTRO: "astro",
+        PHYS: "phys",
+        BIO: "bio",
+        LOGIC: "logic",
+        HIST: "hist",
+        DEFENSE: "def",
+        ANY: "any"
+    };
+
+    const UNIVERSAL_CATS = [CAT.LOGIC, CAT.DEFENSE, CAT.ANY];
+
+    const REACTIONS = {
+        FAIL: [
+            "Причем тут это вообще?",
+            "Ты уходишь от темы!",
+            "Не надо мне зубы заговаривать!",
+            "Это к делу не относится!",
+            "Сменил тему? Слив засчитан!",
+            "Что за бред ты несешь?",
+            "А в огороде бузина...",
+            "Ты про что сейчас вообще?",
+            "Совсем с дуба рухнул?",
+            "Мимо кассы!"
+        ],
+        HIT: [
+            "Ну и что?",
+            "Допустим, но это не всё.",
+            "Не очень-то убедительно.",
+            "У меня есть свои источники.",
+            "Я тебе не верю!",
+            "Это всего лишь теория.",
+            "Это твое мнение.",
+            "А вот мой дядя говорит по-другому!",
+            "Ученые могут ошибаться."
+        ],
+        CRIT: [
+            "Этого не может быть...!",
+            "Откуда... откуда эти данные?!",
+            "Вы всё врете! Это фотошоп!",
+            "Замолчи! Я не хочу это слушать!",
+            "Нет! Моя картина мира рушится!",
+            "Ты меня запутал... стоп...",
+            "Это... это правда?",
+            "Не может быть! Не верю!",
+            "Ааа! Хватит! Стоп!"
+        ],
+        DEFENSE: [
+            "Ты меня игнорируешь?",
+            "Слушай меня!",
+            "Я еще не закончил!",
+            "Почему ты молчишь?",
+            "Эй! Я с тобой разговариваю!",
+            "Ответь мне!"
+        ]
+    };
+
+    const CARDS = [
+        { id: "phys1", name: "Закон Ньютона", cat: CAT.PHYS, cost: 1, dmg: 8, desc: "Сила действия равна силе противодействия." },
+        { id: "phys2", name: "Плотность воды", cat: CAT.PHYS, cost: 1, dmg: 7, desc: "Архимед объяснил законы плавучести." },
+        { id: "phys3", name: "Термодинамика", cat: CAT.PHYS, cost: 2, dmg: 16, desc: "Энтропия замкнутой системы всегда растет." },
+        { id: "phys4", name: "Гравитация", cat: CAT.PHYS, cost: 2, dmg: 14, desc: "Всякая масса притягивает другую массу." },
+        { id: "phys5", name: "Эксперимент Кавендиша", cat: CAT.PHYS, cost: 1, dmg: 9, desc: "Гравитационная постоянная измерена в 1798 году." },
+        { id: "phys6", name: "Законы движения", cat: CAT.PHYS, cost: 1, dmg: 8, desc: "Тело сохраняет скорость, если нет внешних сил." },
+        { id: "phys7", name: "Центростремительная сила", cat: CAT.PHYS, cost: 2, dmg: 13, desc: "Вращение требует силы, направленной к центру." },
+        { id: "phys8", name: "Маятник Фуко", cat: CAT.PHYS, cost: 2, dmg: 15, desc: "Плоскость качания поворачивается, доказывая вращение Земли." },
+        { id: "phys9", name: "Эффект Кориолиса", cat: CAT.PHYS, cost: 1, dmg: 10, desc: "Циклоны закручиваются из-за вращения планеты." },
+        { id: "phys10", name: "Спектральный анализ", cat: CAT.PHYS, cost: 1, dmg: 9, desc: "Химия звезд видна через призму." },
+
+        { id: "astro1", name: "Снимок NASA", cat: CAT.ASTRO, cost: 2, dmg: 15, desc: "Вот фото Земли в высоком разрешении." },
+        { id: "astro2", name: "Тень Земли", cat: CAT.ASTRO, cost: 1, dmg: 7, desc: "Во время затмения тень всегда круглая." },
+        { id: "astro3", name: "Параллакс звезд", cat: CAT.ASTRO, cost: 1, dmg: 9, desc: "Звезды смещаются при движении Земли по орбите." },
+        { id: "astro4", name: "МКС Live Stream", cat: CAT.ASTRO, cost: 2, dmg: 13, desc: "Прямая трансляция с орбиты доступна всем." },
+        { id: "astro5", name: "Корабли за горизонтом", cat: CAT.ASTRO, cost: 1, dmg: 8, desc: "Сначала исчезает корпус, потом мачта." },
+        { id: "astro6", name: "Часовые пояса", cat: CAT.ASTRO, cost: 1, dmg: 7, desc: "В разных местах разное время, так как Земля круглая." },
+        { id: "astro7", name: "Фазы Луны", cat: CAT.ASTRO, cost: 1, dmg: 8, desc: "Освещение шара Солнцем с разных углов." },
+        { id: "astro8", name: "Южный крест", cat: CAT.ASTRO, cost: 2, dmg: 14, desc: "Это созвездие не видно из Северного полушария." },
+        { id: "astro9", name: "Гравитационная линза", cat: CAT.ASTRO, cost: 2, dmg: 16, desc: "Масса искривляет свет, как предсказал Эйнштейн." },
+        { id: "astro10", name: "Рефракция", cat: CAT.ASTRO, cost: 1, dmg: 9, desc: "Атмосфера искривляет лучи света у горизонта." },
+
+        { id: "bio1", name: "Клеточная теория", cat: CAT.BIO, cost: 1, dmg: 7, desc: "Все живое состоит из клеток." },
+        { id: "bio2", name: "ДНК анализ", cat: CAT.BIO, cost: 2, dmg: 13, desc: "Генетический код подтверждает родство видов." },
+        { id: "bio3", name: "Иммунитет", cat: CAT.BIO, cost: 1, dmg: 6, block: 6, desc: "Вакцины тренируют иммунную систему." },
+        { id: "bio4", name: "Двойное слепое", cat: CAT.BIO, cost: 2, dmg: 14, desc: "Этот метод исключает эффект плацебо." },
+        { id: "bio5", name: "Электронный микроскоп", cat: CAT.BIO, cost: 1, dmg: 8, desc: "Мы можем видеть вирусы своими глазами." },
+        { id: "bio6", name: "Естественный отбор", cat: CAT.BIO, cost: 2, dmg: 15, desc: "Выживают наиболее приспособленные организмы." },
+        { id: "bio7", name: "Рудименты", cat: CAT.BIO, cost: 1, dmg: 9, desc: "Копчик и аппендикс — остатки эволюции." },
+        { id: "bio8", name: "Эрадикация оспы", cat: CAT.BIO, cost: 2, dmg: 12, desc: "Только вакцины уничтожили эту болезнь." },
+        { id: "bio9", name: "Резистентность", cat: CAT.BIO, cost: 1, dmg: 8, desc: "Бактерии эволюционируют, привыкая к антибиотикам." },
+        { id: "bio10", name: "Гомология", cat: CAT.BIO, cost: 1, dmg: 10, desc: "Лапа кошки и рука человека имеют одинаковые кости." },
+
+        { id: "hist1", name: "Архивные данные", cat: CAT.HIST, cost: 1, dmg: 9, desc: "Есть тысячи рассекреченных документов." },
+        { id: "hist2", name: "Радиоуглерод", cat: CAT.HIST, cost: 2, dmg: 17, desc: "Изотопы углерода точно показывают возраст органики." },
+        { id: "hist3", name: "Культурный слой", cat: CAT.HIST, cost: 1, dmg: 8, desc: "Археологи копают слои, как страницы книги." },
+        { id: "hist4", name: "Летописи", cat: CAT.HIST, cost: 2, dmg: 12, desc: "События записаны разными независимыми монахами." },
+        { id: "hist5", name: "Нумизматика", cat: CAT.HIST, cost: 1, dmg: 7, desc: "Монеты с датами найдены в раскопах." },
+        { id: "hist6", name: "Пленочные фото", cat: CAT.HIST, cost: 1, dmg: 9, desc: "Негативы нельзя подделать так, как цифру." },
+        { id: "hist7", name: "Перекрестные ссылки", cat: CAT.HIST, cost: 2, dmg: 14, desc: "Об этом писали и в Риме, и в Китае одновременно." },
+        { id: "hist8", name: "Годовые кольца", cat: CAT.HIST, cost: 1, dmg: 10, desc: "Деревья сохраняют историю климата за тысячи лет." },
+        { id: "hist9", name: "Стратиграфия", cat: CAT.HIST, cost: 2, dmg: 13, desc: "Чем глубже слой, тем древнее находка." },
+        { id: "hist10", name: "Анализ чернил", cat: CAT.HIST, cost: 1, dmg: 8, desc: "Химсостав чернил соответствует той эпохе." },
+
+        { id: "logic1", name: "Бритва Оккама", cat: CAT.LOGIC, cost: 1, dmg: 7, desc: "Не стоит множить сущности без необходимости." },
+        { id: "logic2", name: "Ad Hominem", cat: CAT.LOGIC, cost: 0, dmg: 4, desc: "Переход на личности не делает тебя правым." },
+        { id: "logic3", name: "Бремя доказательства", cat: CAT.LOGIC, cost: 1, dmg: 10, desc: "Доказывать должен тот, кто утверждает." },
+        { id: "logic4", name: "Strawman", cat: CAT.LOGIC, cost: 0, dmg: 3, draw: 1, desc: "Ты споришь с выдуманным аргументом, а не со мной." },
+        { id: "logic5", name: "Modus Ponens", cat: CAT.LOGIC, cost: 2, dmg: 15, desc: "Если из А следует Б, и есть А, значит есть Б." },
+        { id: "logic6", name: "Ложная дилемма", cat: CAT.LOGIC, cost: 1, dmg: 8, desc: "Мир не черно-белый, есть другие варианты." },
+        { id: "logic7", name: "После ≠ вследствие", cat: CAT.LOGIC, cost: 1, dmg: 9, desc: "Корреляция не означает причинно-следственную связь." },
+        { id: "logic8", name: "Апелляция к природе", cat: CAT.LOGIC, cost: 1, dmg: 7, desc: "Яды и болезни тоже натуральны, но они вредны." },
+        { id: "logic9", name: "Мнение большинства", cat: CAT.LOGIC, cost: 0, dmg: 5, desc: "Миллионы людей могут ошибаться." },
+        { id: "logic10", name: "Круговая аргументация", cat: CAT.LOGIC, cost: 1, dmg: 8, desc: "Ты доказываешь библию библией, это ошибка." },
+        { id: "logic11", name: "Ошибка выжившего", cat: CAT.LOGIC, cost: 1, dmg: 6, desc: "Ты не слышишь тех, кто не выжил." },
+        { id: "logic12", name: "Подмена понятий", cat: CAT.LOGIC, cost: 0, dmg: 4, draw: 1, desc: "Давай вернемся к изначальному определению." },
+
+        { id: "def1", name: "Игнор", cat: CAT.DEFENSE, cost: 1, block: 8, desc: "Я просто пропущу это мимо ушей." },
+        { id: "def2", name: "Банхаммер", cat: CAT.DEFENSE, cost: 2, block: 15, desc: "Угроза бана — лучшая защита." },
+        { id: "def3", name: "Фактчекинг", cat: CAT.DEFENSE, cost: 0, block: 4, draw: 1, desc: "Подожди, я сейчас проверю это в гугле." },
+        { id: "def4", name: "Глубокий вдох", cat: CAT.DEFENSE, cost: 1, block: 7, desc: "Я сохраняю спокойствие и не ведусь на провокации." },
+        { id: "def5", name: "Ссылки", cat: CAT.DEFENSE, cost: 1, block: 9, desc: "Вот ссылки на рецензируемые источники." },
+        { id: "def6", name: "Блокировка", cat: CAT.DEFENSE, cost: 2, block: 12, desc: "Мне не интересно продолжать этот разговор." },
+        { id: "def7", name: "Ирония", cat: CAT.DEFENSE, cost: 0, block: 5, desc: "Твои слова вызывают лишь улыбку." },
+        { id: "def8", name: "Пауза", cat: CAT.DEFENSE, cost: 1, block: 10, desc: "Давай сделаем перерыв и остынем." },
+
+        { id: "util1", name: "Чай", cat: CAT.ANY, cost: 1, heal: 6, desc: "Глоток горячего чая успокаивает нервы." },
+        { id: "util2", name: "Медитация", cat: CAT.ANY, cost: 2, heal: 10, desc: "Я восстанавливаю свой ментальный баланс." },
+        { id: "util3", name: "Поиск", cat: CAT.ANY, cost: 0, draw: 2, desc: "Нужно найти новые аргументы." },
+        { id: "util4", name: "Конспект", cat: CAT.ANY, cost: 1, draw: 3, desc: "Обращаюсь к своим записям." },
+        { id: "util5", name: "Эврика", cat: CAT.ANY, cost: 1, energy: 2, desc: "Внезапное озарение дает силы спорить дальше." }
+    ];
+
+    const ENEMIES = [
+        {
+            name: "Плоскоземельщик Олег",
+            hp: 70,
+            moves: [
+                { text: "Вода всегда находит уровень! Почему она не стекает с шара?", weakness: CAT.PHYS, dmg: 8, type: "attack" },
+                { text: "Самолеты летят прямо, они не опускают нос каждые 8 км!", weakness: CAT.PHYS, dmg: 9, type: "attack" },
+                { text: "Я не вижу изгиба горизонта на пляже, он прямой!", weakness: CAT.ASTRO, dmg: 7, type: "attack" },
+                { text: "Нас накрыли куполом, а звезды - это проекция на экране!", weakness: CAT.ASTRO, dmg: 0, buff: 7, type: "buff" },
+                { text: "Антарктида - это ледяная стена, которую охраняют военные!", weakness: CAT.HIST, dmg: 6, type: "attack" },
+                { text: "NASA врет, все их снимки - это фотошоп и CGI!", weakness: CAT.ASTRO, dmg: 10, type: "attack" },
+                { text: "Гравитация - это просто плотность и плавучесть!", weakness: CAT.PHYS, dmg: 8, type: "attack" },
+                { text: "Почему мы не чувствуем вращения Земли? Скорость огромная!", weakness: CAT.PHYS, dmg: 9, type: "attack" },
+                { text: "В Библии написано про твердь небесную!", weakness: CAT.LOGIC, dmg: 7, type: "attack" },
+                { text: "Никто не летал в космос, это невозможно!", weakness: CAT.HIST, dmg: 8, type: "attack" }
+            ]
+        },
+        {
+            name: "Мама-Антиваксер",
+            hp: 80,
+            moves: [
+                { text: "В вакцинах ртуть, формальдегид и чипы 5G!", weakness: CAT.BIO, dmg: 11, type: "attack" },
+                { text: "Мой ребенок - мои правила, наука мне не указ!", weakness: CAT.LOGIC, dmg: 0, buff: 9, type: "buff" },
+                { text: "Врачи просто хотят заработать на наших болезнях!", weakness: CAT.LOGIC, dmg: 7, type: "attack" },
+                { text: "Натуральный иммунитет лучше любой химии!", weakness: CAT.BIO, dmg: 9, type: "attack" },
+                { text: "Аутизм от прививок, я читала статью в блоге!", weakness: CAT.BIO, dmg: 12, type: "attack" },
+                { text: "Наши предки жили без прививок и были здоровы!", weakness: CAT.HIST, dmg: 8, type: "attack" },
+                { text: "Это заговор Большой Фармы по сокращению населения!", weakness: CAT.LOGIC, dmg: 6, type: "attack" },
+                { text: "Я чувствую сердцем, что это вредно!", weakness: CAT.LOGIC, dmg: 5, type: "attack" },
+                { text: "Зачем прививка, если болезнь редкая?", weakness: CAT.BIO, dmg: 8, type: "attack" },
+                { text: "В составе есть клетки эмбрионов!", weakness: CAT.BIO, dmg: 10, type: "attack" }
+            ]
+        },
+        {
+            name: "Конспиролог Рен-ТВ",
+            hp: 90,
+            moves: [
+                { text: "Пирамиды построили инопланетяне лазером!", weakness: CAT.HIST, dmg: 10, type: "attack" },
+                { text: "Правительство скрывает технологии свободной энергии Теслы!", weakness: CAT.PHYS, dmg: 8, type: "attack" },
+                { text: "Эволюция - ложь, людей вывели в пробирке анунаки!", weakness: CAT.BIO, dmg: 9, type: "attack" },
+                { text: "Земля полая внутри, там живут рептилоиды и Гитлер!", weakness: CAT.ASTRO, dmg: 13, type: "attack" },
+                { text: "5G вышки облучают нас и контролируют разум!", weakness: CAT.BIO, dmg: 11, type: "attack" },
+                { text: "Луна искусственная, она пустая внутри!", weakness: CAT.ASTRO, dmg: 12, type: "attack" },
+                { text: "Чернобыль - это испытание психотронного оружия!", weakness: CAT.HIST, dmg: 9, type: "attack" },
+                { text: "Кислород медленно убивает нас, переходи на прану!", weakness: CAT.BIO, dmg: 0, buff: 10, type: "buff" },
+                { text: "Вся история переписана в 18 веке!", weakness: CAT.HIST, dmg: 8, type: "attack" },
+                { text: "Адронный коллайдер открывает портал в ад!", weakness: CAT.PHYS, dmg: 14, type: "attack" }
+            ]
+        },
+        {
+            name: "Тролль 80 уровня",
+            hp: 60,
+            moves: [
+                { text: "Азаза, у тебя просто пригорело! 🔥", weakness: CAT.LOGIC, dmg: 6, type: "attack" },
+                { text: "Слив засчитан! Я победил, удаляй канал.", weakness: CAT.DEFENSE, dmg: 15, type: "attack" },
+                { text: "Да ты бот, кто тебе платит? Госдеп?", weakness: CAT.LOGIC, dmg: 7, type: "attack" },
+                { text: "))0))0) лол кек чебурек", weakness: CAT.DEFENSE, dmg: 5, buff: 5, type: "buff" },
+                { text: "Докажи! Нет, не то! Опять не то! Не верю!", weakness: CAT.LOGIC, dmg: 8, type: "attack" },
+                { text: "Ты просто завидуешь моему высокому IQ!", weakness: CAT.DEFENSE, dmg: 6, type: "attack" },
+                { text: "Много букв, не осилил. Ты не прав.", weakness: CAT.DEFENSE, dmg: 5, type: "attack" },
+                { text: "Ой всё.", weakness: CAT.LOGIC, dmg: 4, type: "attack" }
+            ]
+        },
+        {
+            name: "Псевдоисторик",
+            hp: 85,
+            moves: [
+                { text: "Татаро-монгольское иго выдумали немцы!", weakness: CAT.HIST, dmg: 10, type: "attack" },
+                { text: "Славяне летали в космос 5000 лет назад на виманах!", weakness: CAT.HIST, dmg: 9, type: "attack" },
+                { text: "Римская империя украла культуру у Великой Тартарии!", weakness: CAT.HIST, dmg: 11, type: "attack" },
+                { text: "Радиоуглеродный анализ врет, ученые в сговоре!", weakness: CAT.PHYS, dmg: 12, type: "attack" },
+                { text: "Все археологи продались Западу!", weakness: CAT.LOGIC, dmg: 8, type: "attack" },
+                { text: "Я нашел доказательства в 'Велесовой книге'!", weakness: CAT.HIST, dmg: 0, buff: 8, type: "buff" },
+                { text: "Санкт-Петербург откопали, а не построили!", weakness: CAT.HIST, dmg: 10, type: "attack" },
+                { text: "Наполеон на самом деле воевал с Англией в Москве!", weakness: CAT.HIST, dmg: 9, type: "attack" }
+            ]
+        }
+    ];
+
+    let state = {
+        player: { hp: 60, maxHp: 60, energy: 3, block: 0, hand: [], deck: [], discard: [], masterDeck: [] },
+        enemy: null,
+        enemyMoveDeck: [],
+        currentThesis: null,
+        turn: 1
+    };
+
+    const INTRO_TEXT = "2025 год. Эпоха Пост-Правды.\n\nВы — Модератор Разума.\nВаша цель: Опровергнуть ересь.\nВаше оружие: Факты, Логика и Наука.\n\nСлушайте  бред и подбирайте верный аргумент!\n\nОсторожно: Несвязные аргументы наносят урон ВАМ ЖЕ от стыда!";
+
+    function typeWriter(text, elementId, speed, callback) {
+        let i = 0;
+        let el = document.getElementById(elementId);
+        el.innerHTML = "";
+        function type() {
+            if (i < text.length) {
+                let char = text.charAt(i);
+                el.innerHTML += char === '\n' ? '<br>' : char;
+                i++;
+                setTimeout(type, speed);
+            } else if (callback) {
+                callback();
+            }
+        }
+        type();
+    }
+
+    function speak(text, interrupt = false) {
+        if (!SOUND_ON || !window.speechSynthesis) return;
+        if (interrupt) window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "ru-RU";
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function toggleSound() {
+        SOUND_ON = !SOUND_ON;
+        window.speechSynthesis.cancel();
+        document.getElementById("soundBtn").textContent = SOUND_ON ? "🔊 Звук" : "🔇 Тишина";
+    }
+
+    window.onload = () => {
+        const deckComposition = [
+            "phys1", "phys2", "phys3", "astro1", "astro2", "astro3",
+            "bio1", "bio2", "bio3", "hist1", "hist2", "hist3",
+            "logic1", "logic2", "logic3", "logic4", "logic5",
+            "def1", "def2", "def3", "util1", "util2", "util3"
+        ];
+
+        state.player.masterDeck = deckComposition;
+
+        typeWriter(INTRO_TEXT, "storyText", 30, () => {
+            setTimeout(() => speak(INTRO_TEXT), 500);
+        });
+
+        document.getElementById("startBtn").addEventListener("click", startGame);
+        document.getElementById("soundBtn").addEventListener("click", toggleSound);
+        document.getElementById("endTurnBtn").addEventListener("click", endPlayerTurn);
+        document.getElementById("restartBtn").addEventListener("click", () => location.reload());
+    };
+
+    function startGame() {
+        window.speechSynthesis.cancel();
+        document.getElementById("screen-story").classList.remove("active");
+        document.getElementById("screen-battle").classList.add("active");
+
+        state.player.deck = state.player.masterDeck.map(id => ({...CARDS.find(c => c.id === id)}));
+        shuffle(state.player.deck);
+
+        let tpl = ENEMIES[Math.floor(Math.random() * ENEMIES.length)];
+        state.enemy = { ...tpl, currentHp: tpl.hp };
+
+        state.enemyMoveDeck = [];
+
+        log(`⚔️ ОППОНЕНТ: ${state.enemy.name}`, "log-crit");
+        startPlayerTurn();
+    }
+
+    function startPlayerTurn() {
+        state.player.energy = 3;
+        state.player.block = 0;
+        state.turn++;
+        document.getElementById("turnCount").innerText = state.turn;
+
+        document.getElementById("enemyBubble").classList.remove("show");
+
+        if (state.enemyMoveDeck.length === 0) {
+            state.enemyMoveDeck = shuffle([...state.enemy.moves]);
+        }
+
+        state.currentThesis = state.enemyMoveDeck.pop();
+
+        updateThesisUI();
+        drawCards(5);
+        updateUI();
+
+        setTimeout(() => {
+            speak(state.currentThesis.text, true);
+        }, 500);
+    }
+
+    function updateThesisUI() {
+        const thesisEl = document.getElementById("enemyThesis");
+        const weakEl = document.getElementById("thesisWeakness");
+        const bar = document.getElementById("thesisBar");
+
+        bar.classList.remove("crit-effect");
+        bar.classList.remove("fail-effect");
+
+        thesisEl.style.opacity = 0;
+        setTimeout(() => {
+            thesisEl.innerText = state.currentThesis.text;
+            thesisEl.style.opacity = 1;
+
+            weakEl.innerText = `Слабость: ???`;
+            weakEl.style.color = "#777";
+        }, 200);
+
+        const intentText = state.currentThesis.type === 'attack'
+            ? `⚔️ Атака (${state.currentThesis.dmg} урона)`
+            : `💊 Бафф (+${state.currentThesis.buff} HP)`;
+        document.getElementById("enemyIntent").innerText = intentText;
+    }
+
+    function showEnemySpeech(text, delay = 0) {
+        setTimeout(() => {
+            const b = document.getElementById("enemyBubble");
+            b.innerText = text;
+            b.classList.add("show");
+
+            speak(text, true);
+
+            setTimeout(() => {
+                b.classList.remove("show");
+            }, 3500);
+        }, delay);
+    }
+
+    function playCard(index) {
+        if (!state.player.hand[index]) return;
+        const card = state.player.hand[index];
+
+        if (state.player.energy < card.cost) {
+            log("❌ Недостаточно энергии!", "log-entry");
+            speak("Нужно больше энергии");
+            return;
+        }
+
+        state.player.energy -= card.cost;
+        state.player.hand.splice(index, 1);
+        state.player.discard.push(card);
+
+        let finalDmg = card.dmg || 0;
+        let isEffective = false;
+        let isCrit = false;
+
+        if (card.cat === state.currentThesis.weakness) {
+            isCrit = true;
+            isEffective = true;
+            finalDmg = Math.floor(finalDmg * 2.5);
+        } else if (UNIVERSAL_CATS.includes(card.cat)) {
+            isEffective = true;
+        } else {
+            isEffective = false;
+            finalDmg = 0;
+        }
+
+        speak(card.name + ". " + card.desc, true);
+
+        if (!isEffective) {
+            state.player.hp -= 5;
+            document.getElementById("playerPanel").classList.add("shame-effect");
+            setTimeout(() => document.getElementById("playerPanel").classList.remove("shame-effect"), 500);
+
+            log(`🚫 Аргумент проигнорирован. Вам стало неловко (-5 HP).`, "log-fail");
+
+            const bar = document.getElementById("thesisBar");
+            bar.classList.add("fail-effect");
+            setTimeout(() => bar.classList.remove("fail-effect"), 500);
+
+            const reaction = REACTIONS.FAIL[Math.floor(Math.random() * REACTIONS.FAIL.length)];
+            showEnemySpeech(reaction, 1800);
+
+        } else if (isCrit) {
+            log(`💥 Критический удар! Аргумент разбил убеждение!`, "log-crit");
+            triggerCritVisuals();
+
+            const reaction = REACTIONS.CRIT[Math.floor(Math.random() * REACTIONS.CRIT.length)];
+            showEnemySpeech(reaction, 2200);
+
+        } else {
+            log(`✓ Аргумент принят.`, "log-player");
+
+            let reaction;
+            if(card.cat === CAT.DEFENSE) {
+                reaction = REACTIONS.DEFENSE[Math.floor(Math.random() * REACTIONS.DEFENSE.length)];
+            } else {
+                reaction = REACTIONS.HIT[Math.floor(Math.random() * REACTIONS.HIT.length)];
+            }
+            showEnemySpeech(reaction, 1800);
+        }
+
+        if (finalDmg > 0) {
+            state.enemy.currentHp -= finalDmg;
+        }
+
+        if (card.block) {
+            state.player.block += card.block;
+        }
+
+        if (card.heal) {
+            state.player.hp = Math.min(state.player.hp + card.heal, state.player.maxHp);
+            log(`💚 Восстановление +${card.heal} HP`, "log-player");
+        }
+
+        if (card.draw) {
+            drawCards(card.draw);
+        }
+
+        if (card.energy) {
+            state.player.energy += card.energy;
+            log(`⚡ Энергия +${card.energy}`, "log-player");
+        }
+
+        updateUI();
+        renderHand();
+        checkWin();
+    }
+
+    function endPlayerTurn() {
+        document.getElementById("endTurnBtn").disabled = true;
+
+        state.player.discard.push(...state.player.hand);
+        state.player.hand = [];
+        renderHand();
+
+        setTimeout(() => {
+            enemyAction();
+            document.getElementById("endTurnBtn").disabled = false;
+        }, 1200);
+    }
+
+    function enemyAction() {
+        if(state.enemy.currentHp <= 0) return;
+
+        let dmg = state.currentThesis.dmg || 0;
+        let buff = state.currentThesis.buff || 0;
+
+        if (dmg > 0) {
+            let blocked = Math.min(dmg, state.player.block);
+            let unblocked = dmg - blocked;
+            state.player.hp -= unblocked;
+            log(`🗡️ ${state.enemy.name} атаковал. Урон: ${unblocked} (Блок: ${blocked}).`, "log-enemy");
+
+            if(unblocked > 10) {
+                speak("Больно!", true);
+            }
+        }
+
+        if (buff > 0) {
+            state.enemy.currentHp += buff;
+            state.enemy.currentHp = Math.min(state.enemy.currentHp, state.enemy.hp + 20);
+            log(`💊 ${state.enemy.name} восстановил ${buff} HP.`, "log-enemy");
+        }
+
+        checkWin();
+
+        if (state.player.hp > 0 && state.enemy.currentHp > 0) {
+            startPlayerTurn();
+        }
+    }
+
+    function drawCards(n) {
+        for(let i=0; i<n; i++) {
+            if (state.player.deck.length === 0) {
+                if (state.player.discard.length === 0) break;
+                state.player.deck = shuffle([...state.player.discard]);
+                state.player.discard = [];
+                log("🔄 Колода перемешана.", "log-entry");
+            }
+            if(state.player.deck.length > 0) {
+                state.player.hand.push(state.player.deck.shift());
+            }
+        }
+        renderHand();
+        updateUI();
+    }
+
+    function renderHand() {
+        const container = document.getElementById("handArea");
+        container.innerHTML = "";
+        state.player.hand.forEach((card, idx) => {
+            const el = document.createElement("div");
+            el.className = "card";
+
+            let catName = "Логика";
+            let catClass = "cat-logic";
+            if (card.cat === CAT.ASTRO) { catClass = "cat-astro"; catName = "Астро"; }
+            if (card.cat === CAT.PHYS) { catClass = "cat-phys"; catName = "Физика"; }
+            if (card.cat === CAT.BIO) { catClass = "cat-bio"; catName = "Био"; }
+            if (card.cat === CAT.HIST) { catClass = "cat-hist"; catName = "История"; }
+            if (card.cat === CAT.DEFENSE) { catClass = "cat-def"; catName = "Защита"; }
+            if (card.cat === CAT.ANY) { catName = "Утилита"; }
+
+            let stats = '';
+            if (card.dmg) stats += `<div class="card-stat-dmg">⚔️ УРОН: ${card.dmg}</div>`;
+            if (card.block) stats += `<div class="card-stat-block">🛡️ БЛОК: ${card.block}</div>`;
+            if (card.heal) stats += `<div style="color:#4dff88">💚 ЛЕЧЕНИЕ: ${card.heal}</div>`;
+            if (card.draw) stats += `<div style="color:#ffcc00">📚 +${card.draw} карт</div>`;
+            if (card.energy) stats += `<div style="color:#ffcc00">⚡ +${card.energy} энергии</div>`;
+
+            el.innerHTML = `
+                <div class="card-cost">${card.cost}</div>
+                <div class="card-cat ${catClass}">${catName}</div>
+                <div class="card-title">${card.name}</div>
+                <div class="card-desc">${card.desc}</div>
+                <div class="card-stats">${stats}</div>
+            `;
+            el.onclick = () => playCard(idx);
+            container.appendChild(el);
+        });
+    }
+
+    function updateUI() {
+        document.getElementById("playerHpText").innerText = `${Math.ceil(state.player.hp)}/${state.player.maxHp}`;
+        let pHpPct = (state.player.hp/state.player.maxHp)*100;
+        document.getElementById("playerHpBar").style.width = `${Math.max(0, pHpPct)}%`;
+        document.getElementById("energyVal").innerText = state.player.energy;
+        document.getElementById("blockVal").innerText = state.player.block;
+        document.getElementById("deckCount").innerText = state.player.deck.length;
+        document.getElementById("discardCount").innerText = state.player.discard.length;
+
+        if(state.enemy) {
+            document.getElementById("enemyName").innerText = state.enemy.name;
+            document.getElementById("enemyHpText").innerText = `${state.enemy.currentHp}/${state.enemy.hp}`;
+            let ePct = (state.enemy.currentHp / state.enemy.hp) * 100;
+            document.getElementById("enemyHpBar").style.width = `${Math.max(0, ePct)}%`;
+        }
+    }
+
+    function checkWin() {
+        if (state.player.hp <= 0) {
+            showEndScreen("💀 ПОРАЖЕНИЕ 💀", `Вы выдохлись и покраснели от стыда. ${state.enemy.name} считает это победой.`);
+            setTimeout(() => speak("К сожалению, вы проиграли спор.", true), 500);
+        } else if (state.enemy.currentHp <= 0) {
+            showEndScreen("🏆 ПОБЕДА! 🏆", `${state.enemy.name} не нашел аргументов и удалил аккаунт. Разум торжествует!`);
+            setTimeout(() => speak("Превосходно! Логика победила!", true), 500);
+        }
+    }
+
+    function showEndScreen(title, desc) {
+        document.getElementById("screen-battle").classList.remove("active");
+        document.getElementById("screen-end").classList.add("active");
+        document.getElementById("endTitle").innerText = title;
+        document.getElementById("endDesc").innerText = desc;
+    }
+
+    function log(msg, cls="log-entry") {
+        const div = document.getElementById("log");
+        div.innerHTML += `<div class="${cls}">▸ ${msg}</div>`;
+        div.scrollTop = div.scrollHeight;
+    }
+
+    function shuffle(array) {
+        return array.sort(() => Math.random() - 0.5);
+    }
+
+    function triggerCritVisuals() {
+        const bar = document.getElementById("thesisBar");
+        bar.classList.add("crit-effect");
+        setTimeout(() => bar.classList.remove("crit-effect"), 600);
+
+        const ol = document.getElementById("critOverlay");
+        ol.style.opacity = 1;
+        ol.style.transform = "translate(-50%, -50%) scale(1.2)";
+        setTimeout(() => {
+            ol.style.opacity = 0;
+            ol.style.transform = "translate(-50%, -50%) scale(1)";
+        }, 1000);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Акустический Отражатель 3.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f0f1d 0%, #1a1a2e 100%);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #66d9ef;
+            text-shadow: 0 0 20px rgba(102, 217, 239, 0.5);
+        }
+
+        p {
+            color: #a0a0b0;
+            margin-bottom: 20px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #gameCanvas {
+            border: 3px solid #66d9ef;
+            background: linear-gradient(180deg, #0f0f1d 0%, #1a1a2e 100%);
+            cursor: crosshair;
+            display: block;
+            box-shadow: 0 0 30px rgba(102, 217, 239, 0.3);
+            border-radius: 8px;
+        }
+
+        #instructions {
+            margin-top: 20px;
+            font-size: 13px;
+            color: #7a7a8e;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        #instructions strong {
+            color: #66d9ef;
+        }
+
+        .menu-overlay {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 600px;
+            background: rgba(15, 15, 29, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 8px;
+            border: 3px solid #66d9ef;
+        }
+
+        .menu-overlay.hidden {
+            display: none;
+        }
+
+        .menu-title {
+            font-size: 48px;
+            color: #66d9ef;
+            text-shadow: 0 0 30px rgba(102, 217, 239, 0.8);
+            margin-bottom: 40px;
+        }
+
+        .menu-button {
+            background: linear-gradient(135deg, #66d9ef 0%, #2196f3 100%);
+            color: #0f0f1d;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 8px;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 217, 239, 0.4);
+        }
+
+        .menu-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 217, 239, 0.6);
+        }
+
+        .menu-button:active {
+            transform: translateY(0);
+        }
+
+        .menu-info {
+            color: #a0a0b0;
+            font-size: 16px;
+            max-width: 500px;
+            margin-top: 30px;
+            line-height: 1.6;
+        }
+
+        .game-stats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 15, 29, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #66d9ef;
+            font-size: 14px;
+            color: #66d9ef;
+            z-index: 5;
+        }
+
+        .game-stats div {
+            margin: 5px 0;
+        }
+
+        .death-message {
+            font-size: 32px;
+            color: #ff4444;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+        }
+
+        .victory-message {
+            font-size: 42px;
+            color: #44ff44;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(68, 255, 68, 0.8);
+            animation: victory-pulse 1s infinite;
+        }
+
+        @keyframes victory-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .checkpoint-text {
+            position: absolute;
+            font-size: 14px;
+            color: #44ff44;
+            pointer-events: none;
+            animation: fade-up 1s forwards;
+        }
+
+        @keyframes fade-up {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Акустический Отражатель</h1>
+    <p>Кликайте чтобы создать звуковые волны и отскочить в противоположном направлении</p>
+
+    <div id="gameCanvas-wrapper" style="position: relative;">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <div id="mainMenu" class="menu-overlay">
+            <div class="menu-title">Акустический Отражатель</div>
+            <button class="menu-button" id="startButton">Начать игру</button>
+            <button class="menu-button" id="continueButton" style="display: none;">Продолжить</button>
+            <div class="menu-info">
+                <strong>Цель:</strong> Достигните финиша в конце уровня!<br>
+                <strong>Управление:</strong> Кликайте мышью, чтобы выпустить звуковую волну.<br>
+                Волны отражаются от стен и толкают вас в противоположном направлении.<br><br>
+                <strong style="color: #ff4444;">⚠ Не падайте в пропасть!</strong>
+            </div>
+        </div>
+
+        <div id="pauseMenu" class="menu-overlay hidden">
+            <div class="menu-title">Пауза</div>
+            <button class="menu-button" id="resumeButton">Продолжить</button>
+            <button class="menu-button" id="restartButton">Начать заново</button>
+            <button class="menu-button" id="mainMenuButton">Главное меню</button>
+        </div>
+
+        <div id="deathMenu" class="menu-overlay hidden">
+            <div class="death-message">☠ Вы погибли ☠</div>
+            <div style="color: #a0a0b0; margin-bottom: 30px;">Вы упали в пропасть...</div>
+            <button class="menu-button" id="respawnButton">Возродиться</button>
+            <button class="menu-button" id="deathMainMenuButton">Главное меню</button>
+        </div>
+
+        <div id="victoryMenu" class="menu-overlay hidden">
+            <div class="victory-message">🏆 Победа! 🏆</div>
+            <div style="color: #a0a0b0; margin-bottom: 20px; font-size: 18px;">
+                Поздравляем! Вы достигли финиша!
+            </div>
+            <div id="victoryStats" style="color: #66d9ef; margin-bottom: 30px; font-size: 16px;"></div>
+            <button class="menu-button" id="playAgainButton">Играть снова</button>
+            <button class="menu-button" id="victoryMainMenuButton">Главное меню</button>
+        </div>
+
+        <div id="gameStats" class="game-stats" style="display: none;">
+            <div>💀 Смертей: <span id="deathCount">0</span></div>
+            <div>📍 Чекпоинт: <span id="checkpointInfo">Старт</span></div>
+            <div style="margin-top: 10px; color: #7a7a8e; font-size: 12px;">ESC - Пауза</div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <p>
+            <strong>Вправо:</strong> кликните влево (в стену)<br>
+            <strong>Прыжок:</strong> кликните вниз (в пол)<br>
+            <strong>Совет:</strong> отражённые волны (золотые) толкают вас после отскока от стен
+        </p>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const PLAYER_RADIUS = 15;
+    const GRAVITY = 0.5;
+    const IMPULSE_POWER = 20;
+    const WAVE_SPEED = 10;
+    const WAVE_MAX_AGE = 100;
+    const WAVE_RADIUS = 5;
+
+    const WORLD_WIDTH = 4000;
+    const WORLD_HEIGHT = 600;
+    const DEATH_Y = WORLD_HEIGHT + 100;
+
+    let gameState = 'menu';
+    let cameraX = 0;
+    let deathCount = 0;
+    let currentCheckpoint = 0;
+    let startTime = 0;
+
+    let player = {
+        x: 100,
+        y: 50,
+        vx: 0,
+        vy: 0,
+        onGround: false
+    };
+
+    let waves = [];
+
+    const checkpoints = [
+        { x: 100, name: 'Старт' },
+        { x: 1000, name: 'Средняя башня' },
+        { x: 2500, name: 'Верхние платформы' },
+        { x: 3500, name: 'Финишная зона' }
+    ];
+
+    const platforms = [
+        [0, WORLD_HEIGHT - 20, WORLD_WIDTH, 20],
+        [200, WORLD_HEIGHT - 150, 200, 20],
+        [500, WORLD_HEIGHT - 250, 150, 20],
+        [750, WORLD_HEIGHT - 400, 100, 20],
+        [950, WORLD_HEIGHT - 500, 100, 20],
+        [1200, WORLD_HEIGHT - 500, 20, 480],
+        [1600, WORLD_HEIGHT - 150, 20, 130],
+        [2000, WORLD_HEIGHT - 150, 20, 130],
+        [2500, WORLD_HEIGHT - 400, 500, 20],
+        [2500, WORLD_HEIGHT - 200, 500, 20],
+        [3500, WORLD_HEIGHT - 150, 300, 20]
+    ];
+
+    const finishLine = {
+        x: 3700,
+        y: WORLD_HEIGHT - 150,
+        width: 50,
+        height: 130
+    };
+
+    const spikes = [
+        [600, WORLD_HEIGHT - 30, 100, 10],
+        [1400, WORLD_HEIGHT - 30, 150, 10],
+        [2200, WORLD_HEIGHT - 30, 200, 10]
+    ];
+
+    function resetPlayer(toCheckpoint = false) {
+        if (toCheckpoint) {
+            const checkpoint = checkpoints[currentCheckpoint];
+            player.x = checkpoint.x;
+            player.y = 50;
+        } else {
+            player.x = 100;
+            player.y = 50;
+            currentCheckpoint = 0;
+        }
+        player.vx = 0;
+        player.vy = 0;
+        player.onGround = false;
+        waves = [];
+    }
+
+    function checkWaveCollisionWithPlatform(wave, platform) {
+        const [px, py, pw, ph] = platform;
+
+        if (wave.x < px || wave.x > px + pw ||
+            wave.y < py || wave.y > py + ph) {
+            return null;
+        }
+
+        const closestX = Math.max(px, Math.min(wave.x, px + pw));
+        const closestY = Math.max(py, Math.min(wave.y, py + ph));
+
+        const dist = Math.sqrt(
+            Math.pow(wave.x - closestX, 2) +
+            Math.pow(wave.y - closestY, 2)
+        );
+
+        if (dist < WAVE_RADIUS + 2) {
+            if (Math.abs(wave.x - closestX) > Math.abs(wave.y - closestY)) {
+                return 'vertical';
+            } else {
+                return 'horizontal';
+            }
+        }
+
+        return null;
+    }
+
+    function checkPlayerSpikeCollision() {
+        for (let spike of spikes) {
+            const [sx, sy, sw, sh] = spike;
+            if (
+                player.x + PLAYER_RADIUS > sx &&
+                player.x - PLAYER_RADIUS < sx + sw &&
+                player.y + PLAYER_RADIUS > sy &&
+                player.y - PLAYER_RADIUS < sy + sh
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkCheckpoint() {
+        for (let i = currentCheckpoint + 1; i < checkpoints.length; i++) {
+            if (player.x >= checkpoints[i].x) {
+                currentCheckpoint = i;
+                document.getElementById('checkpointInfo').textContent = checkpoints[i].name;
+
+                showCheckpointNotification(checkpoints[i].name);
+                return;
+            }
+        }
+    }
+
+    function showCheckpointNotification(name) {
+        const notification = document.createElement('div');
+        notification.className = 'checkpoint-text';
+        notification.textContent = `✓ Чекпоинт: ${name}`;
+        notification.style.left = '50%';
+        notification.style.top = '100px';
+        notification.style.transform = 'translateX(-50%)';
+        document.getElementById('gameCanvas-wrapper').appendChild(notification);
+
+        setTimeout(() => {
+            notification.remove();
+        }, 1000);
+    }
+
+    function checkVictory() {
+        if (
+            player.x + PLAYER_RADIUS > finishLine.x &&
+            player.x - PLAYER_RADIUS < finishLine.x + finishLine.width &&
+            player.y + PLAYER_RADIUS > finishLine.y &&
+            player.y - PLAYER_RADIUS < finishLine.y + finishLine.height
+        ) {
+            gameState = 'victory';
+            const timePlayed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(timePlayed / 60);
+            const seconds = timePlayed % 60;
+            document.getElementById('victoryStats').innerHTML = `
+                ⏱ Время: ${minutes}:${seconds.toString().padStart(2, '0')}<br>
+                💀 Смертей: ${deathCount}<br>
+                📍 Чекпоинтов: ${currentCheckpoint + 1}/${checkpoints.length}
+            `;
+            document.getElementById('victoryMenu').classList.remove('hidden');
+        }
+    }
+
+    function drawSoundWave(wave) {
+        const maxRadius = WAVE_RADIUS + wave.age / 2;
+        const alpha = Math.max(0, 1 - wave.age / WAVE_MAX_AGE);
+        const color = wave.reflected ? 'rgba(255, 215, 0, ' : 'rgba(102, 217, 239, ';
+
+        for (let i = 0; i < 3; i++) {
+            const ringProgress = (wave.age + i * 15) % 50;
+            const radius = maxRadius * (ringProgress / 50);
+            const ringAlpha = alpha * (1 - ringProgress / 50);
+
+            ctx.strokeStyle = color + ringAlpha + ')';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(wave.x, wave.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.setLineDash([]);
+
+        const waveformPoints = 16;
+        const waveformRadius = maxRadius * 0.7;
+        ctx.strokeStyle = color + (alpha * 0.8) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        for (let i = 0; i <= waveformPoints; i++) {
+            const angle = (i / waveformPoints) * Math.PI * 2;
+            const distortion = Math.sin(angle * 4 + wave.age * 0.3) * 3;
+            const r = waveformRadius + distortion;
+            const x = wave.x + Math.cos(angle) * r;
+            const y = wave.y + Math.sin(angle) * r;
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    function drawPlayer() {
+        const gradient = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, PLAYER_RADIUS);
+        gradient.addColorStop(0, '#66d9ef');
+        gradient.addColorStop(0.7, '#2196f3');
+        gradient.addColorStop(1, '#1565c0');
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#99d9ea';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        const eyeOffset = 5;
+        const eyeSize = 3;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(player.x - eyeOffset, player.y - 3, eyeSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(player.x + eyeOffset, player.y - 3, eyeSize, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#1a1a2e';
+        ctx.beginPath();
+        ctx.arc(player.x - eyeOffset, player.y - 3, eyeSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(player.x + eyeOffset, player.y - 3, eyeSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+        if (speed > 1) {
+            const trailLength = Math.min(speed * 2, 20);
+            const trailAngle = Math.atan2(player.vy, player.vx) + Math.PI;
+
+            for (let i = 0; i < 3; i++) {
+                const alpha = (3 - i) / 5;
+                ctx.strokeStyle = 'rgba(102, 217, 239, ' + alpha + ')';
+                ctx.lineWidth = 3 - i;
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y);
+                ctx.lineTo(
+                    player.x + Math.cos(trailAngle) * (trailLength + i * 3),
+                    player.y + Math.sin(trailAngle) * (trailLength + i * 3)
+                );
+                ctx.stroke();
+            }
+        }
+    }
+
+    function drawFinishLine() {
+        const gradient = ctx.createLinearGradient(
+            finishLine.x,
+            finishLine.y,
+            finishLine.x + finishLine.width,
+            finishLine.y + finishLine.height
+        );
+        gradient.addColorStop(0, 'rgba(68, 255, 68, 0.3)');
+        gradient.addColorStop(0.5, 'rgba(68, 255, 68, 0.6)');
+        gradient.addColorStop(1, 'rgba(68, 255, 68, 0.3)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(finishLine.x, finishLine.y, finishLine.width, finishLine.height);
+
+        ctx.strokeStyle = '#44ff44';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 10]);
+        ctx.strokeRect(finishLine.x, finishLine.y, finishLine.width, finishLine.height);
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#44ff44';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.save();
+        ctx.translate(finishLine.x + finishLine.width / 2, finishLine.y + finishLine.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('🏁 ФИНИШ', 0, 0);
+        ctx.restore();
+    }
+
+    function drawSpikes() {
+        spikes.forEach(spike => {
+            const [sx, sy, sw, sh] = spike;
+
+            ctx.fillStyle = '#ff4444';
+            ctx.strokeStyle = '#cc0000';
+            ctx.lineWidth = 2;
+
+            const spikeCount = Math.floor(sw / 20);
+            const spikeWidth = sw / spikeCount;
+
+            ctx.beginPath();
+            for (let i = 0; i < spikeCount; i++) {
+                const x = sx + i * spikeWidth;
+                ctx.moveTo(x, sy + sh);
+                ctx.lineTo(x + spikeWidth / 2, sy);
+                ctx.lineTo(x + spikeWidth, sy + sh);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        });
+    }
+
+    function update() {
+        if (gameState !== 'playing') return;
+
+        if (!player.onGround) {
+            player.vy += GRAVITY;
+        }
+
+        player.vx *= 0.96;
+        player.vy *= 0.96;
+
+        player.x += player.vx;
+        player.y += player.vy;
+        player.onGround = false;
+
+        platforms.forEach(p => {
+            const [px, py, pw, ph] = p;
+
+            if (
+                player.x + PLAYER_RADIUS > px &&
+                player.x - PLAYER_RADIUS < px + pw &&
+                player.y + PLAYER_RADIUS > py &&
+                player.y - PLAYER_RADIUS < py + ph
+            ) {
+                if (player.vy > 0 && player.y - PLAYER_RADIUS < py + 5) {
+                    player.y = py - PLAYER_RADIUS;
+                    player.vy = 0;
+                    player.onGround = true;
+                }
+                else if (player.vy < 0 && player.y + PLAYER_RADIUS > py + ph - 5) {
+                    player.y = py + ph + PLAYER_RADIUS;
+                    player.vy = 0;
+                }
+                else if (player.vx > 0 && player.x - PLAYER_RADIUS < px + pw && player.x > px) {
+                    player.x = px - PLAYER_RADIUS;
+                    player.vx = 0;
+                }
+                else if (player.vx < 0 && player.x + PLAYER_RADIUS > px && player.x < px + pw) {
+                    player.x = px + pw + PLAYER_RADIUS;
+                    player.vx = 0;
+                }
+            }
+        });
+
+        if (checkPlayerSpikeCollision() || player.y > DEATH_Y) {
+            gameState = 'dead';
+            deathCount++;
+            document.getElementById('deathCount').textContent = deathCount;
+            document.getElementById('deathMenu').classList.remove('hidden');
+            return;
+        }
+
+        checkCheckpoint();
+        checkVictory();
+
+        waves = waves.filter(wave => {
+            if (wave.age > WAVE_MAX_AGE) return false;
+
+            wave.age++;
+            wave.x += wave.vx * WAVE_SPEED;
+            wave.y += wave.vy * WAVE_SPEED;
+
+            let reflected = false;
+
+            if (wave.x < 0) {
+                wave.x = 0;
+                wave.vx = Math.abs(wave.vx);
+                reflected = true;
+            }
+            if (wave.x > WORLD_WIDTH) {
+                wave.x = WORLD_WIDTH;
+                wave.vx = -Math.abs(wave.vx);
+                reflected = true;
+            }
+            if (wave.y < 0) {
+                wave.y = 0;
+                wave.vy = Math.abs(wave.vy);
+                reflected = true;
+            }
+            if (wave.y > WORLD_HEIGHT) {
+                wave.y = WORLD_HEIGHT;
+                wave.vy = -Math.abs(wave.vy);
+                reflected = true;
+            }
+
+            for (let platform of platforms) {
+                const collision = checkWaveCollisionWithPlatform(wave, platform);
+                if (collision) {
+                    if (collision === 'vertical') {
+                        wave.vx *= -1;
+                    } else {
+                        wave.vy *= -1;
+                    }
+                    reflected = true;
+                    break;
+                }
+            }
+
+            if (reflected) {
+                wave.reflected = true;
+            }
+
+            const dist = Math.sqrt(Math.pow(player.x - wave.x, 2) + Math.pow(player.y - wave.y, 2));
+
+            if (dist < PLAYER_RADIUS + WAVE_RADIUS && wave.reflected) {
+                const dx = player.x - wave.x;
+                const dy = player.y - wave.y;
+                const distToPlayer = Math.sqrt(dx * dx + dy * dy);
+
+                if (distToPlayer > 0) {
+                    const pushX = (dx / distToPlayer) * IMPULSE_POWER;
+                    const pushY = (dy / distToPlayer) * IMPULSE_POWER;
+
+                    player.vx += pushX;
+                    player.vy += pushY;
+                }
+
+                return false;
+            }
+
+            const distFromScreen = Math.abs(wave.x - (player.x)) > 1000;
+            if (distFromScreen) {
+                return false;
+            }
+
+            return true;
+        });
+
+        player.x = Math.min(Math.max(player.x, PLAYER_RADIUS), WORLD_WIDTH - PLAYER_RADIUS);
+
+        cameraX = player.x - canvas.width / 2;
+        cameraX = Math.max(0, cameraX);
+        cameraX = Math.min(WORLD_WIDTH - canvas.width, cameraX);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#0f0f1d');
+        gradient.addColorStop(1, '#1a1a2e');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(-cameraX, 0);
+
+        ctx.fillStyle = '#4a0e4e';
+        ctx.strokeStyle = '#7b1fa2';
+        ctx.lineWidth = 2;
+        platforms.forEach(p => {
+            ctx.fillRect(p[0], p[1], p[2], p[3]);
+            ctx.strokeRect(p[0], p[1], p[2], p[3]);
+        });
+
+        drawSpikes();
+        drawFinishLine();
+
+        waves.forEach(wave => {
+            drawSoundWave(wave);
+        });
+
+        if (gameState === 'playing' || gameState === 'dead') {
+            drawPlayer();
+        }
+
+        ctx.restore();
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+        gameState = 'playing';
+        resetPlayer(false);
+        deathCount = 0;
+        startTime = Date.now();
+        document.getElementById('deathCount').textContent = deathCount;
+        document.getElementById('checkpointInfo').textContent = checkpoints[0].name;
+        document.getElementById('mainMenu').classList.add('hidden');
+        document.getElementById('gameStats').style.display = 'block';
+        canvas.style.cursor = 'crosshair';
+    }
+
+    canvas.addEventListener('click', (event) => {
+        if (gameState !== 'playing') return;
+
+        const rect = canvas.getBoundingClientRect();
+
+        const screenClickX = event.clientX;
+        const screenClickY = event.clientY;
+
+        const worldClickX = screenClickX - rect.left + cameraX;
+        const worldClickY = screenClickY - rect.top;
+
+        const dx = worldClickX - player.x;
+        const dy = worldClickY - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance === 0) return;
+
+        const vx = dx / distance;
+        const vy = dy / distance;
+
+        waves.push({
+            x: player.x,
+            y: player.y,
+            vx: vx,
+            vy: vy,
+            age: 0,
+            reflected: false
+        });
+
+        const recoilStrength = 0.3;
+        player.vx += -vx * IMPULSE_POWER * recoilStrength;
+        player.vy += -vy * IMPULSE_POWER * recoilStrength;
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && gameState === 'playing') {
+            gameState = 'paused';
+            document.getElementById('pauseMenu').classList.remove('hidden');
+            canvas.style.cursor = 'default';
+        }
+    });
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+
+    document.getElementById('resumeButton').addEventListener('click', () => {
+        gameState = 'playing';
+        document.getElementById('pauseMenu').classList.add('hidden');
+        canvas.style.cursor = 'crosshair';
+    });
+
+    document.getElementById('restartButton').addEventListener('click', () => {
+        startGame();
+        document.getElementById('pauseMenu').classList.add('hidden');
+    });
+
+    document.getElementById('mainMenuButton').addEventListener('click', () => {
+        gameState = 'menu';
+        document.getElementById('pauseMenu').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
+        document.getElementById('gameStats').style.display = 'none';
+        canvas.style.cursor = 'default';
+    });
+
+    document.getElementById('respawnButton').addEventListener('click', () => {
+        resetPlayer(true);
+        gameState = 'playing';
+        document.getElementById('deathMenu').classList.add('hidden');
+        canvas.style.cursor = 'crosshair';
+    });
+
+    document.getElementById('deathMainMenuButton').addEventListener('click', () => {
+        gameState = 'menu';
+        document.getElementById('deathMenu').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
+        document.getElementById('gameStats').style.display = 'none';
+        canvas.style.cursor = 'default';
+    });
+
+    document.getElementById('playAgainButton').addEventListener('click', () => {
+        document.getElementById('victoryMenu').classList.add('hidden');
+        startGame();
+    });
+
+    document.getElementById('victoryMainMenuButton').addEventListener('click', () => {
+        gameState = 'menu';
+        document.getElementById('victoryMenu').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
+        document.getElementById('gameStats').style.display = 'none';
+        canvas.style.cursor = 'default';
+    });
+
+    gameLoop();
+</script>
+</body>
+</html>
