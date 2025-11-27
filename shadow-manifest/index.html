@@ -150,6 +150,35 @@
             text-shadow: 0 0 10px #8000ff;
         }
 
+        /* New style for reload hint */
+        #reload-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            color: #ffcc00;
+            font-size: 2em;
+            font-weight: bold;
+            z-index: 100;
+            display: none;
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from {
+                opacity: 0.8;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+
+
         #crosshair {
             position: absolute;
             top: 50%;
@@ -230,56 +259,58 @@
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="canvas"></canvas>
+<div id="game-container">
+    <canvas id="canvas"></canvas>
 
-        <div id="menu">
-            <div class="menu-title">SHADOW MANIFEST</div>
-            <div class="menu-description">
-                <p>Вы владеете уникальным оружием, способным управлять светом и тенью.</p>
-                <p><strong>Световой Эмиттер</strong> - создает яркий свет, смещает тени врагов</p>
-                <p><strong>Поглотитель Тьмы</strong> - наносит урон только при попадании в тень</p>
-                <p>Используйте освещение тактически, чтобы выявить слабости врагов!</p>
-            </div>
-            <button class="menu-btn" id="start-btn">НАЧАТЬ МИССИЮ</button>
+    <div id="menu">
+        <div class="menu-title">SHADOW MANIFEST</div>
+        <div class="menu-description">
+            <p>Вы владеете уникальным оружием, способным управлять светом и тенью.</p>
+            <p><strong>Световой Эмиттер</strong> - создает яркий свет, **делает врага уязвимым**</p>
+            <p><strong>Поглотитель Тьмы</strong> - наносит урон только при попадании во **врага, сделанного уязвимым светом**</p>
+            <p>Используйте освещение тактически, чтобы выявить слабости врагов!</p>
         </div>
+        <button class="menu-btn" id="start-btn">НАЧАТЬ МИССИЮ</button>
+    </div>
 
-        <div id="hud">
-            <div class="hud-row">
-                <div class="hud-panel">
-                    <div class="hud-stat">Здоровье</div>
-                    <div class="health-bar">
-                        <div class="health-fill" id="health-fill" style="width: 100%"></div>
-                    </div>
-                    <div class="hud-stat">Врагов: <span id="enemy-count">0</span></div>
-                    <div class="hud-stat">Волна: <span id="wave-count">1</span></div>
+    <div id="hud">
+        <div class="hud-row">
+            <div class="hud-panel">
+                <div class="hud-stat">Здоровье</div>
+                <div class="health-bar">
+                    <div class="health-fill" id="health-fill" style="width: 100%"></div>
                 </div>
-
-                <div class="hud-panel weapon-display">
-                    <div class="weapon-name" id="weapon-name">Световой Эмиттер</div>
-                    <div class="hud-stat">Патроны: <span id="ammo-count">30</span>/∞</div>
-                    <div class="hud-stat" style="font-size: 0.9em; color: #aaa;">Переключение: Q или 1/2</div>
-                </div>
+                <div class="hud-stat">Врагов: <span id="enemy-count">0</span></div>
+                <div class="hud-stat">Волна: <span id="wave-count">1</span></div>
             </div>
-        </div>
 
-        <div id="crosshair">
-            <div class="crosshair-line h"></div>
-            <div class="crosshair-line v"></div>
-        </div>
-
-        <div id="controls-hint">
-            WASD - Движение | Мышь - Взгляд | ЛКМ - Огонь | Q/1/2 - Смена оружия | ESC - Меню
-        </div>
-
-        <div id="game-over">
-            <div class="game-over-title" id="game-over-title">ПОБЕДА</div>
-            <div style="font-size: 1.5em; margin-bottom: 30px;" id="game-over-stats"></div>
-            <button class="menu-btn" id="restart-btn">ЗАНОВО</button>
+            <div class="hud-panel weapon-display">
+                <div class="weapon-name" id="weapon-name">Световой Эмиттер</div>
+                <div class="hud-stat">Патроны: <span id="ammo-count">30</span>/<span id="ammo-max">30</span></div>
+                <div class="hud-stat" style="font-size: 0.9em; color: #aaa;">Переключение: Q или 1/2</div>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="game.js"></script>
+    <div id="reload-hint">ПЕРЕЗАГРУЗКА...</div>
+
+    <div id="crosshair">
+        <div class="crosshair-line h"></div>
+        <div class="crosshair-line v"></div>
+    </div>
+
+    <div id="controls-hint">
+        WASD - Движение | Мышь - Взгляд | ЛКМ - Огонь | Q/1/2 - Смена оружия | ESC - Меню
+    </div>
+
+    <div id="game-over">
+        <div class="game-over-title" id="game-over-title">ПОБЕДА</div>
+        <div style="font-size: 1.5em; margin-bottom: 30px;" id="game-over-stats"></div>
+        <button class="menu-btn" id="restart-btn">ЗАНОВО</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="game.js"></script>
 </body>
 </html>

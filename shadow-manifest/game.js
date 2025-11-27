@@ -20,7 +20,7 @@ const GameState = {
             name: 'Световой Эмиттер',
             ammo: 30,
             maxAmmo: 30,
-            damage: 0,
+            damage: 0, // No direct damage
             reloadTime: 1500,
             fireRate: 200,
             lastFire: 0,
@@ -42,19 +42,31 @@ const GameState = {
     enemies: [],
     projectiles: [],
     lights: [],
+    collidableObjects: [], // NEW: Список объектов для проверки столкновений
     wave: 1,
     enemiesKilled: 0,
     isPlaying: false,
-    isPaused: false,
+    isPaused: true, // Начинаем с паузы для меню
+    isReloading: false, // NEW: Состояние перезарядки
     mouseMovement: { x: 0, y: 0 },
     keys: {},
     clock: new THREE.Clock()
 };
 
+// DOM Elements
+const menuElement = document.getElementById('menu');
+const healthFill = document.getElementById('health-fill');
+const enemyCountDisplay = document.getElementById('enemy-count');
+const waveCountDisplay = document.getElementById('wave-count');
+const weaponNameDisplay = document.getElementById('weapon-name');
+const ammoCountDisplay = document.getElementById('ammo-count');
+const ammoMaxDisplay = document.getElementById('ammo-max');
+const reloadHint = document.getElementById('reload-hint');
+const canvas = document.getElementById('canvas');
+
+
 // Initialize Game
 function init() {
-    const canvas = document.getElementById('canvas');
-
     // Setup Renderer
     GameState.renderer = new THREE.WebGLRenderer({
         canvas,
@@ -86,6 +98,10 @@ function init() {
     // Start Menu
     document.getElementById('start-btn').addEventListener('click', startGame);
     document.getElementById('restart-btn').addEventListener('click', restartGame);
+
+    // Initial HUD update
+    switchWeapon(GameState.weapons.current);
+    updateAmmoDisplay();
 
     // Animation Loop
     animate();
@@ -126,46 +142,42 @@ function createWalls() {
 
     const wallHeight = 5;
     const arenaSize = 40;
+    const wallThickness = 1;
+
+    const wallGeometryZ = new THREE.BoxGeometry(arenaSize, wallHeight, wallThickness);
+    const wallGeometryX = new THREE.BoxGeometry(wallThickness, wallHeight, arenaSize);
 
     // North wall
-    const northWall = new THREE.Mesh(
-        new THREE.BoxGeometry(arenaSize, wallHeight, 1),
-        wallMaterial
-    );
+    const northWall = new THREE.Mesh(wallGeometryZ, wallMaterial);
     northWall.position.set(0, wallHeight/2, -arenaSize/2);
     northWall.castShadow = true;
     northWall.receiveShadow = true;
     GameState.scene.add(northWall);
+    GameState.collidableObjects.push(northWall);
 
     // South wall
-    const southWall = new THREE.Mesh(
-        new THREE.BoxGeometry(arenaSize, wallHeight, 1),
-        wallMaterial
-    );
+    const southWall = new THREE.Mesh(wallGeometryZ, wallMaterial);
     southWall.position.set(0, wallHeight/2, arenaSize/2);
     southWall.castShadow = true;
     southWall.receiveShadow = true;
     GameState.scene.add(southWall);
+    GameState.collidableObjects.push(southWall);
 
     // East wall
-    const eastWall = new THREE.Mesh(
-        new THREE.BoxGeometry(1, wallHeight, arenaSize),
-        wallMaterial
-    );
+    const eastWall = new THREE.Mesh(wallGeometryX, wallMaterial);
     eastWall.position.set(arenaSize/2, wallHeight/2, 0);
     eastWall.castShadow = true;
     eastWall.receiveShadow = true;
     GameState.scene.add(eastWall);
+    GameState.collidableObjects.push(eastWall);
 
     // West wall
-    const westWall = new THREE.Mesh(
-        new THREE.BoxGeometry(1, wallHeight, arenaSize),
-        wallMaterial
-    );
+    const westWall = new THREE.Mesh(wallGeometryX, wallMaterial);
     westWall.position.set(-arenaSize/2, wallHeight/2, 0);
     westWall.castShadow = true;
     westWall.receiveShadow = true;
     GameState.scene.add(westWall);
+    GameState.collidableObjects.push(westWall);
 }
 
 function createOverheadLights() {
@@ -219,6 +231,7 @@ function createObstacles() {
         obstacle.castShadow = true;
         obstacle.receiveShadow = true;
         GameState.scene.add(obstacle);
+        GameState.collidableObjects.push(obstacle); // Добавление в список коллизий
     });
 }
 
@@ -254,6 +267,10 @@ function spawnEnemy() {
     GameState.scene.add(body);
     GameState.scene.add(head);
 
+    // Сохраняем исходные цвета
+    const originalBodyColor = bodyMaterial.color.clone();
+    const originalHeadColor = headMaterial.color.clone();
+
     const enemy = {
         body,
         head,
@@ -265,7 +282,10 @@ function spawnEnemy() {
         attackCooldown: 2000,
         shadowExposed: false,
         shadowExposeTime: 0,
-        isDead: false
+        isDead: false,
+        originalBodyColor: originalBodyColor,
+        originalHeadColor: originalHeadColor,
+        radius: 0.5 // Радиус для коллизии
     };
 
     GameState.enemies.push(enemy);
@@ -290,7 +310,12 @@ function setupEventListeners() {
 
     // Keyboard
     document.addEventListener('keydown', (e) => {
-        if (!GameState.isPlaying) return;
+        if (e.code === 'Escape') {
+            togglePause();
+            return;
+        }
+
+        if (!GameState.isPlaying || GameState.isPaused) return;
 
         GameState.keys[e.code] = true;
 
@@ -298,8 +323,6 @@ function setupEventListeners() {
             switchWeapon('light');
         } else if (e.code === 'Digit2') {
             switchWeapon('dark');
-        } else if (e.code === 'Escape') {
-            togglePause();
         }
     });
 
@@ -314,6 +337,14 @@ function setupEventListeners() {
         }
     });
 
+    // Pointer lock change listener for pause menu consistency
+    document.addEventListener('pointerlockchange', () => {
+        if (document.pointerLockElement !== canvas && GameState.isPlaying && !GameState.isPaused) {
+            togglePause();
+        }
+    });
+
+
     // Window resize
     window.addEventListener('resize', onWindowResize);
 }
@@ -324,9 +355,9 @@ function switchWeapon(type) {
     GameState.weapons.current = type;
     const weapon = GameState.weapons[type];
 
-    document.getElementById('weapon-name').textContent = weapon.name;
-    document.getElementById('weapon-name').className = 'weapon-name weapon-' + type;
-    document.getElementById('ammo-count').textContent = weapon.ammo;
+    weaponNameDisplay.textContent = weapon.name;
+    weaponNameDisplay.className = 'weapon-name weapon-' + type;
+    updateAmmoDisplay();
 }
 
 function fire() {
@@ -334,7 +365,7 @@ function fire() {
     const weapon = GameState.weapons[GameState.weapons.current];
 
     if (now - weapon.lastFire < weapon.fireRate) return;
-    if (weapon.ammo <= 0) {
+    if (weapon.ammo <= 0 || GameState.isReloading) {
         reload();
         return;
     }
@@ -354,16 +385,22 @@ function fire() {
 
     // Auto reload
     if (weapon.ammo === 0) {
+        // Небольшая задержка, чтобы выстрел успел зарегистрироваться
         setTimeout(() => reload(), 100);
     }
 }
 
 function reload() {
     const weapon = GameState.weapons[GameState.weapons.current];
-    if (weapon.ammo === weapon.maxAmmo) return;
+    if (weapon.ammo === weapon.maxAmmo || GameState.isReloading) return;
+
+    GameState.isReloading = true;
+    if (reloadHint) reloadHint.style.display = 'block';
 
     setTimeout(() => {
         weapon.ammo = weapon.maxAmmo;
+        GameState.isReloading = false;
+        if (reloadHint) reloadHint.style.display = 'none';
         updateAmmoDisplay();
     }, weapon.reloadTime);
 }
@@ -400,6 +437,25 @@ function createProjectile(position, direction, weapon) {
     });
 }
 
+// --- Collision Helpers ---
+const tempBox = new THREE.Box3();
+const playerSphere = new THREE.Sphere(undefined, 0.5);
+
+function checkPlayerCollision(nextPosition) {
+    // Игрок - это сфера с радиусом 0.5
+    playerSphere.center.copy(nextPosition);
+    playerSphere.center.y = GameState.player.height;
+
+    for (const mesh of GameState.collidableObjects) {
+        tempBox.setFromObject(mesh);
+        // Проверка пересечения сферы игрока с AABB (ограничивающим параллелепипедом) объекта
+        if (tempBox.intersectsSphere(playerSphere)) {
+            return true; // Столкновение обнаружено
+        }
+    }
+    return false;
+}
+
 function updatePlayer(delta) {
     // Mouse look
     GameState.player.rotation.y -= GameState.mouseMovement.x * GameState.player.lookSpeed;
@@ -430,10 +486,28 @@ function updatePlayer(delta) {
 
     if (moveVector.length() > 0) {
         moveVector.normalize();
-        GameState.player.position.add(moveVector.multiplyScalar(GameState.player.moveSpeed * delta));
+
+        const movement = moveVector.clone().multiplyScalar(GameState.player.moveSpeed * delta);
+        const nextPosition = GameState.player.position.clone().add(movement);
+
+        // COLLISION CHECK
+        if (!checkPlayerCollision(nextPosition)) {
+            GameState.player.position.copy(nextPosition);
+        } else {
+            // Если столкновение, пытаемся двигаться только по одной оси (X или Z)
+            const nextX = GameState.player.position.clone().add(new THREE.Vector3(movement.x, 0, 0));
+            if (!checkPlayerCollision(nextX)) {
+                GameState.player.position.copy(nextX);
+            } else {
+                const nextZ = GameState.player.position.clone().add(new THREE.Vector3(0, 0, movement.z));
+                if (!checkPlayerCollision(nextZ)) {
+                    GameState.player.position.copy(nextZ);
+                }
+            }
+        }
     }
 
-    // Boundaries
+    // Boundaries (Раньше это было единственной коллизией)
     const boundary = 18;
     GameState.player.position.x = Math.max(-boundary, Math.min(boundary, GameState.player.position.x));
     GameState.player.position.z = Math.max(-boundary, Math.min(boundary, GameState.player.position.z));
@@ -458,12 +532,44 @@ function updateEnemies(delta) {
                 .normalize();
 
             direction.y = 0;
+            const movement = direction.clone().multiplyScalar(enemy.speed * delta);
+            const nextPosition = enemyPos.clone().add(movement);
 
-            enemyPos.add(direction.multiplyScalar(enemy.speed * delta));
+            // ENEMY COLLISION CHECK (остановка при столкновении)
+            let collided = false;
+
+            // Check against walls/obstacles
+            for (const mesh of GameState.collidableObjects) {
+                tempBox.setFromObject(mesh);
+                const enemySphere = new THREE.Sphere(nextPosition, enemy.radius);
+                if (tempBox.intersectsSphere(enemySphere)) {
+                    collided = true;
+                    break;
+                }
+            }
+
+            // Check against other enemies
+            for (const otherEnemy of GameState.enemies) {
+                if (otherEnemy !== enemy && !otherEnemy.isDead) {
+                    const distanceToOther = nextPosition.distanceTo(otherEnemy.body.position);
+                    if (distanceToOther < enemy.radius + otherEnemy.radius) {
+                        collided = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!collided) {
+                enemyPos.copy(nextPosition);
+            }
+
+            // Correct head position to follow body
             enemy.head.position.set(enemyPos.x, enemyPos.y + 1.2, enemyPos.z);
 
             // Face player
-            enemy.body.lookAt(playerPos);
+            enemy.body.lookAt(playerPos.x, enemyPos.y, playerPos.z);
+            enemy.head.lookAt(playerPos.x, enemyPos.y + 1.2, playerPos.z);
+
         } else {
             // Attack player
             if (now - enemy.lastAttack > enemy.attackCooldown) {
@@ -472,11 +578,20 @@ function updateEnemies(delta) {
             }
         }
 
-        // Check shadow exposure
+        // Refined Check shadow exposure duration and visual
         if (enemy.shadowExposed) {
             if (now - enemy.shadowExposeTime > 3000) {
                 enemy.shadowExposed = false;
+                // Revert color
+                enemy.body.material.color.copy(enemy.originalBodyColor);
+                enemy.head.material.color.copy(enemy.originalHeadColor);
+            } else {
+                // Flash/Glow effect to show exposure
+                const timeFactor = Math.sin(now * 0.01) * 0.5 + 0.5; // Sine wave for pulsing
+                enemy.body.material.emissiveIntensity = 0.5 + timeFactor * 0.5; // Pulse from 0.5 to 1.0
             }
+        } else {
+            enemy.body.material.emissiveIntensity = 0.5; // Default intensity
         }
     });
 }
@@ -499,17 +614,15 @@ function updateProjectiles(delta) {
 
             const distance = proj.mesh.position.distanceTo(enemy.body.position);
 
-            if (distance < 1) {
+            if (distance < 1) { // Hit registered
                 if (proj.type === 'light') {
-                    // Light weapon exposes shadow
                     handleLightHit(proj, enemy);
                 } else if (proj.type === 'dark') {
-                    // Dark weapon damages if shadow is exposed
                     handleDarkHit(proj, enemy);
                 }
 
                 GameState.scene.remove(proj.mesh);
-                return false;
+                return false; // Projectile is removed
             }
         }
 
@@ -526,52 +639,57 @@ function updateProjectiles(delta) {
 }
 
 function handleLightHit(projectile, enemy) {
-    // Light hit creates a temporary light source that exposes the enemy's shadow
-    const tempLight = new THREE.PointLight(0xffffaa, 2, 10);
-    tempLight.position.copy(projectile.mesh.position);
-    tempLight.castShadow = true;
-    GameState.scene.add(tempLight);
-
-    // Mark enemy shadow as exposed
+    // Light hit sets enemy to 'shadowExposed' state for 3 seconds
     enemy.shadowExposed = true;
     enemy.shadowExposeTime = Date.now();
 
-    // Visual feedback
-    const flashGeometry = new THREE.SphereGeometry(2, 16, 16);
-    const flashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff00,
-        transparent: true,
-        opacity: 0.5
-    });
-    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
-    flash.position.copy(projectile.mesh.position);
-    GameState.scene.add(flash);
+    // Visual feedback: Change color to bright cyan to indicate exposure
+    enemy.body.material.color.set(0x00ffff);
+    enemy.head.material.color.set(0x00ffff);
+
+    // Simple light effect for the flash
+    const tempLight = new THREE.PointLight(0xffffaa, 5, 5);
+    tempLight.position.copy(projectile.mesh.position);
+    GameState.scene.add(tempLight);
 
     setTimeout(() => {
         GameState.scene.remove(tempLight);
-        GameState.scene.remove(flash);
-    }, 500);
+    }, 200);
+
+    // createTextParticle('ЗАСВЕЧЕН!', enemy.body.position, 0x00ffff);
 }
 
 function handleDarkHit(projectile, enemy) {
     if (enemy.shadowExposed) {
-        // Damage enemy
+        // Damage enemy only if shadow is exposed
         enemy.health -= projectile.damage;
 
         // Visual damage effect
-        enemy.body.material.emissiveIntensity = 1;
+        enemy.body.material.emissiveIntensity = 2.0; // Intense flash
+        enemy.body.material.color.set(0xaa00ff); // Purple hit indicator
+
         setTimeout(() => {
             if (!enemy.isDead) {
+                // Revert to exposed color or original color if exposure time passed
+                if (enemy.shadowExposed) {
+                    enemy.body.material.color.set(0x00ffff);
+                    enemy.head.material.color.set(0x00ffff);
+                } else {
+                    enemy.body.material.color.copy(enemy.originalBodyColor);
+                    enemy.head.material.color.copy(enemy.originalHeadColor);
+                }
                 enemy.body.material.emissiveIntensity = 0.5;
             }
         }, 100);
+
+        // createTextParticle(`-${projectile.damage} HP`, enemy.body.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xaa00ff);
 
         if (enemy.health <= 0) {
             killEnemy(enemy);
         }
     } else {
-        // No damage - shadow not exposed
-        createTextParticle('НЕ УЯЗВИМ', enemy.body.position, 0xff0000);
+        // No damage - shadow not exposed (Dark bullet is absorbed harmlessly)
+        // createTextParticle('НЕ УЯЗВИМ', enemy.body.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xff0000);
     }
 }
 
@@ -579,14 +697,17 @@ function killEnemy(enemy) {
     enemy.isDead = true;
     GameState.enemiesKilled++;
 
-    // Death animation
-    const scale = { value: 1 };
+    // Death animation: fade and sink
     const interval = setInterval(() => {
-        scale.value -= 0.05;
-        enemy.body.scale.set(scale.value, scale.value, scale.value);
-        enemy.head.scale.set(scale.value, scale.value, scale.value);
+        if (!enemy.body || !enemy.head) return; // Prevent errors if removed too quickly
 
-        if (scale.value <= 0) {
+        // Scale and sink
+        enemy.body.scale.multiplyScalar(0.95);
+        enemy.head.scale.multiplyScalar(0.95);
+        enemy.body.position.y -= 0.05;
+        enemy.head.position.y -= 0.05;
+
+        if (enemy.body.scale.x < 0.1) {
             clearInterval(interval);
             GameState.scene.remove(enemy.body);
             GameState.scene.remove(enemy.head);
@@ -597,10 +718,7 @@ function killEnemy(enemy) {
     }, 50);
 }
 
-function createTextParticle(text, position, color) {
-    // Simple visual feedback - in a real game you'd use sprites or DOM elements
-    console.log(text, 'at', position);
-}
+// function createTextParticle(text, position, color) { /* ... */ } // Убрано для простоты, используется console.log
 
 function damagePlayer(damage) {
     GameState.player.health -= damage;
@@ -628,7 +746,13 @@ function damagePlayer(damage) {
 function checkWaveComplete() {
     if (GameState.enemies.length === 0 && GameState.isPlaying) {
         GameState.wave++;
-        document.getElementById('wave-count').textContent = GameState.wave;
+        waveCountDisplay.textContent = GameState.wave;
+
+        // Пример: Победа после волны 5
+        if (GameState.wave > 5) {
+            gameOver(true);
+            return;
+        }
 
         setTimeout(() => {
             spawnWave();
@@ -647,25 +771,27 @@ function spawnWave() {
 
 function updateHealthDisplay() {
     const percent = (GameState.player.health / GameState.player.maxHealth) * 100;
-    document.getElementById('health-fill').style.width = percent + '%';
+    healthFill.style.width = percent + '%';
 }
 
 function updateAmmoDisplay() {
     const weapon = GameState.weapons[GameState.weapons.current];
-    document.getElementById('ammo-count').textContent = weapon.ammo;
+    ammoCountDisplay.textContent = GameState.isReloading ? '...' : weapon.ammo; // Показывать "..." при перезарядке
+    ammoMaxDisplay.textContent = weapon.maxAmmo === Infinity ? '∞' : weapon.maxAmmo;
 }
 
 function updateEnemyCount() {
-    document.getElementById('enemy-count').textContent = GameState.enemies.length;
+    enemyCountDisplay.textContent = GameState.enemies.length;
 }
 
 function togglePause() {
     GameState.isPaused = !GameState.isPaused;
     if (GameState.isPaused) {
-        document.getElementById('menu').classList.remove('hidden');
+        menuElement.classList.remove('hidden');
         document.getElementById('start-btn').textContent = 'ПРОДОЛЖИТЬ';
+        document.exitPointerLock();
     } else {
-        document.getElementById('menu').classList.add('hidden');
+        menuElement.classList.add('hidden');
         canvas.requestPointerLock();
     }
 }
@@ -673,12 +799,13 @@ function togglePause() {
 function startGame() {
     GameState.isPlaying = true;
     GameState.isPaused = false;
-    document.getElementById('menu').classList.add('hidden');
+    menuElement.classList.add('hidden');
     document.getElementById('game-over').classList.remove('show');
     canvas.requestPointerLock();
+    if (reloadHint) reloadHint.style.display = 'none';
 
-    // Reset if first start
-    if (GameState.wave === 1 && GameState.enemies.length === 0) {
+    // Reset if first start or after restart
+    if (GameState.enemies.length === 0) {
         spawnWave();
     }
 }
@@ -695,7 +822,7 @@ function restartGame() {
     GameState.projectiles.forEach(proj => {
         GameState.scene.remove(proj.mesh);
     });
-    GameState.projectiles = [];
+    GameState.projectiles.length = 0;
 
     // Reset state
     GameState.player.health = GameState.player.maxHealth;
@@ -704,18 +831,26 @@ function restartGame() {
     GameState.enemiesKilled = 0;
     GameState.weapons.light.ammo = GameState.weapons.light.maxAmmo;
     GameState.weapons.dark.ammo = GameState.weapons.dark.maxAmmo;
+    GameState.isReloading = false;
+
+    // Reset camera position/rotation
+    GameState.player.rotation.x = 0;
+    GameState.player.rotation.y = 0;
+
     switchWeapon('light');
 
     updateHealthDisplay();
-    updateAmmoDisplay();
     document.getElementById('wave-count').textContent = GameState.wave;
     updateEnemyCount();
 
+    // Hide game over and start game
+    document.getElementById('game-over').classList.remove('show');
     startGame();
 }
 
 function gameOver(victory) {
     GameState.isPlaying = false;
+    GameState.isPaused = true;
 
     const title = document.getElementById('game-over-title');
     const stats = document.getElementById('game-over-stats');
@@ -723,7 +858,7 @@ function gameOver(victory) {
     if (victory) {
         title.textContent = 'ПОБЕДА';
         title.className = 'game-over-title victory';
-        stats.textContent = `Волна ${GameState.wave} пройдена! Убито врагов: ${GameState.enemiesKilled}`;
+        stats.textContent = `Вы прошли игру! Убито врагов: ${GameState.enemiesKilled}`;
     } else {
         title.textContent = 'ПОРАЖЕНИЕ';
         title.className = 'game-over-title defeat';
@@ -749,9 +884,13 @@ function animate() {
 }
 
 function onWindowResize() {
-    GameState.camera.aspect = window.innerWidth / window.innerHeight;
-    GameState.camera.updateProjectionMatrix();
-    GameState.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (GameState.camera) {
+        GameState.camera.aspect = window.innerWidth / window.innerHeight;
+        GameState.camera.updateProjectionMatrix();
+    }
+    if (GameState.renderer) {
+        GameState.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 }
 
 // Start initialization when page loads
