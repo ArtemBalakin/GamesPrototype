@@ -98,6 +98,7 @@
             <p>1. <span class="highlight">СВЕТОВОЙ ЭМИТТЕР</span>: Стреляйте во врага, чтобы <strong>оторвать его тень</strong> и отбросить её на стену.</p>
             <p>2. <span class="highlight-dark">ПОГЛОТИТЕЛЬ ТЬМЫ</span>: Стреляйте в <strong>ТЕНЬ НА СТЕНЕ</strong> (фиолетовое кольцо), чтобы нанести урон врагу.</p>
             <br>
+            <p><strong>ОСОБЕННОСТЬ:</strong> <span class="highlight">ЭХО ТЕНЕЙ</span> - отразите тень от одной стены на другую, чтобы атаковать врага со спины!</p>
             <p>Сам враг неуязвим для прямого урона.</p>
         </div>
         <button class="menu-btn" id="start-btn">НАЧАТЬ МИССИЮ</button>
@@ -181,6 +182,7 @@
         collidableObjects: [],
         walls: [],
         activeShadows: [],
+        echoShadows: [],
         wave: 1,
         enemiesKilled: 0,
         isPlaying: false,
@@ -325,7 +327,7 @@
         // Попытка найти свободное место
         while (!validPosition && attempts < 20) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 15 + Math.random() * 15;
+            const dist = 12 + Math.random() * 5;
             pos = new THREE.Vector3(Math.cos(angle)*dist, 1, Math.sin(angle)*dist);
 
             validPosition = true;
@@ -455,6 +457,7 @@
             if (proj.type === 'dark') {
                 // Важно: проверяем пересечение с мешем тени или её кольцом
                 GameState.activeShadows.forEach(s => checkList.push(s.mesh));
+                GameState.echoShadows.forEach(e => checkList.push(e.mesh));
             }
 
             const intersects = raycaster.intersectObjects(checkList, true); // true для рекурсивной проверки детей (кольца)
@@ -515,7 +518,41 @@
                 enemy.head.material.transparent = true;
                 enemy.head.material.opacity = 0.5;
                 enemy.head.material.color.set(0x555555);
+
+                // Автоматическое создание эхо через 1 сек
+                setTimeout(() => {
+                    if (!enemy.isDead && enemy.shadowProjection) {
+                        createAutoEcho(enemy.shadowProjection);
+                    }
+                }, 1000);
             }
+        }
+    }
+
+    function createAutoEcho(shadowData) {
+        // Выбираем случайную стену для отражения
+        const walls = [];
+        const dirs = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, -1)
+        ];
+
+        for (let dir of dirs) {
+            const raycaster = new THREE.Raycaster(shadowData.wallPoint, dir);
+            const intersects = raycaster.intersectObjects(GameState.walls);
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                if (hit.distance > 5) {
+                    walls.push({ point: hit.point, normal: hit.face.normal });
+                }
+            }
+        }
+
+        if (walls.length > 0) {
+            const targetWall = walls[Math.floor(Math.random() * walls.length)];
+            createEchoShadow(shadowData, targetWall.normal, targetWall.point);
         }
     }
 
@@ -550,7 +587,10 @@
         // Данные для логики
         shadowMesh.userData = {
             isShadowProjection: true,
-            owner: enemy
+            owner: enemy,
+            wallNormal: normal.clone(),
+            wallPoint: point.clone(),
+            isEcho: false
         };
 
         // Принудительный рендер поверх всего
@@ -558,9 +598,56 @@
 
         GameState.scene.add(shadowMesh);
 
-        const shadowData = { mesh: shadowMesh, owner: enemy, ring: ringMesh, time: 0 };
+        const shadowData = { mesh: shadowMesh, owner: enemy, ring: ringMesh, time: 0, wallNormal: normal.clone(), wallPoint: point.clone() };
         GameState.activeShadows.push(shadowData);
         enemy.shadowProjection = shadowData;
+    }
+
+    function createEchoShadow(originShadow, targetWallNormal, targetPoint) {
+        // Создаем "эхо" - отражение тени на другой стене
+        const echoGeo = new THREE.CircleGeometry(1.5, 32);
+        const echoMat = new THREE.MeshBasicMaterial({
+            color: 0x0088ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.6,
+            depthTest: false
+        });
+
+        const echoMesh = new THREE.Mesh(echoGeo, echoMat);
+        echoMesh.position.copy(targetPoint).add(targetWallNormal.clone().multiplyScalar(0.15));
+        echoMesh.lookAt(targetPoint.clone().add(targetWallNormal));
+
+        // Голубое кольцо для эхо
+        const echoRingGeo = new THREE.RingGeometry(1.5, 1.8, 32);
+        const echoRingMat = new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.7,
+            depthTest: false
+        });
+        const echoRingMesh = new THREE.Mesh(echoRingGeo, echoRingMat);
+        echoMesh.add(echoRingMesh);
+
+        echoMesh.userData = {
+            isShadowProjection: true,
+            owner: originShadow.owner,
+            isEcho: true,
+            wallNormal: targetWallNormal.clone()
+        };
+
+        echoMesh.renderOrder = 998;
+        GameState.scene.add(echoMesh);
+
+        GameState.echoShadows.push({
+            mesh: echoMesh,
+            owner: originShadow.owner,
+            time: 0,
+            duration: 2000
+        });
+
+        return echoMesh;
     }
 
     function damageEnemyThroughShadow(enemy, damage, shadowMeshObj) {
@@ -672,6 +759,19 @@
             shadow.time += delta * 5;
             const scale = 1 + Math.sin(shadow.time) * 0.1; // Пульсация от 0.9 до 1.1
             shadow.mesh.scale.set(scale, scale, scale);
+        });
+
+        // Обновление эхо-теней
+        GameState.echoShadows = GameState.echoShadows.filter(echo => {
+            echo.time += delta;
+            const pulse = 1 + Math.sin(echo.time * 6) * 0.15;
+            echo.mesh.scale.set(pulse, pulse, pulse);
+
+            if (echo.time > echo.duration) {
+                GameState.scene.remove(echo.mesh);
+                return false;
+            }
+            return true;
         });
 
         GameState.enemies.forEach(enemy => {
@@ -786,8 +886,10 @@
             GameState.scene.remove(e.head);
         });
         GameState.activeShadows.forEach(s => GameState.scene.remove(s.mesh));
+        GameState.echoShadows.forEach(e => GameState.scene.remove(e.mesh));
         GameState.enemies = [];
         GameState.activeShadows = [];
+        GameState.echoShadows = [];
 
         GameState.wave = 1;
         GameState.enemiesKilled = 0;
