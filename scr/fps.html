@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shadow Manifest - Echoes</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; background: #000; color: #fff; overflow: hidden; user-select: none; }
+        #game-container { width: 100vw; height: 100vh; position: relative; }
+        #canvas { display: block; width: 100%; height: 100%; }
+
+        /* UI Styling */
+        #menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        #menu.hidden { display: none; }
+        .menu-title {
+            font-size: 4em; font-weight: bold; margin-bottom: 20px;
+            text-shadow: 0 0 20px #fff, 0 0 40px #0ff, 0 0 60px #00f;
+            animation: glow 2s ease-in-out infinite; text-align: center;
+        }
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 20px #fff, 0 0 40px #0ff, 0 0 60px #00f; }
+            50% { text-shadow: 0 0 30px #fff, 0 0 60px #0ff, 0 0 90px #00f; }
+        }
+        .menu-description {
+            max-width: 700px; text-align: center; margin-bottom: 30px;
+            line-height: 1.6; padding: 0 20px; font-size: 1.2em;
+        }
+        .highlight { color: #0ff; font-weight: bold; }
+        .highlight-dark { color: #a0f; font-weight: bold; }
+
+        .menu-btn {
+            padding: 15px 40px; font-size: 1.3em;
+            background: linear-gradient(45deg, #0066ff, #00ccff);
+            border: none; color: white; cursor: pointer; border-radius: 5px;
+            transition: all 0.3s; margin: 10px;
+        }
+        .menu-btn:hover { transform: scale(1.1); box-shadow: 0 0 20px #0ff; }
+
+        #hud { position: absolute; top: 0; left: 0; width: 100%; padding: 20px; z-index: 10; pointer-events: none; }
+        .hud-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .hud-panel { background: rgba(0, 0, 0, 0.7); padding: 15px; border-radius: 5px; border: 2px solid rgba(0, 200, 255, 0.5); }
+        .hud-stat { margin: 5px 0; font-size: 1.1em; }
+        .health-bar { width: 200px; height: 20px; background: rgba(100, 0, 0, 0.8); border: 2px solid #f00; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+        .health-fill { height: 100%; background: linear-gradient(90deg, #f00, #ff0); transition: width 0.3s; }
+
+        .weapon-display { text-align: right; }
+        .weapon-name { font-size: 1.3em; font-weight: bold; margin-bottom: 5px; }
+        .weapon-light { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+        .weapon-dark { color: #8000ff; text-shadow: 0 0 10px #8000ff; }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 30px; height: 30px; pointer-events: none; z-index: 5;
+        }
+        .crosshair-line { position: absolute; background: rgba(0, 255, 255, 0.8); box-shadow: 0 0 5px #0ff; }
+        .crosshair-line.h { width: 20px; height: 2px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .crosshair-line.v { width: 2px; height: 20px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+        #reload-hint {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9); padding: 20px 40px; border-radius: 10px;
+            color: #ffcc00; font-size: 2em; font-weight: bold; z-index: 100;
+            display: none; animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse { from { opacity: 0.8; transform: translate(-50%, -50%) scale(1); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.05); } }
+
+        #controls-hint {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8); padding: 15px 30px; border-radius: 5px; text-align: center; z-index: 10;
+        }
+
+        #game-over {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        #game-over.show { display: flex; }
+        .game-over-title { font-size: 3em; margin-bottom: 20px; }
+        .victory { color: #0f0; text-shadow: 0 0 20px #0f0; }
+        .defeat { color: #f00; text-shadow: 0 0 20px #f00; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="canvas"></canvas>
+
+    <div id="menu">
+        <div class="menu-title">SHADOW MANIFEST</div>
+        <div class="menu-description">
+            <p><strong>НОВАЯ МЕХАНИКА:</strong></p>
+            <br>
+            <p>1. <span class="highlight">СВЕТОВОЙ ЭМИТТЕР</span>: Стреляйте во врага, чтобы <strong>оторвать его тень</strong> и отбросить её на стену.</p>
+            <p>2. <span class="highlight-dark">ПОГЛОТИТЕЛЬ ТЬМЫ</span>: Стреляйте в <strong>ТЕНЬ НА СТЕНЕ</strong> (фиолетовое кольцо), чтобы нанести урон врагу.</p>
+            <br>
+            <p>Сам враг неуязвим для прямого урона.</p>
+        </div>
+        <button class="menu-btn" id="start-btn">НАЧАТЬ МИССИЮ</button>
+    </div>
+
+    <div id="hud">
+        <div class="hud-row">
+            <div class="hud-panel">
+                <div class="hud-stat">Здоровье</div>
+                <div class="health-bar">
+                    <div class="health-fill" id="health-fill" style="width: 100%"></div>
+                </div>
+                <div class="hud-stat">Врагов: <span id="enemy-count">0</span></div>
+                <div class="hud-stat">Волна: <span id="wave-count">1</span></div>
+            </div>
+
+            <div class="hud-panel weapon-display">
+                <div class="weapon-name" id="weapon-name">Световой Эмиттер</div>
+                <div class="hud-stat">Патроны: <span id="ammo-count">30</span>/<span id="ammo-max">30</span></div>
+                <div class="hud-stat" style="font-size: 0.9em; color: #aaa;">Смена: Q или 1/2</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reload-hint">ПЕРЕЗАГРУЗКА...</div>
+
+    <div id="crosshair">
+        <div class="crosshair-line h"></div>
+        <div class="crosshair-line v"></div>
+    </div>
+
+    <div id="controls-hint">
+        WASD - Движение | Мышь - Взгляд | ЛКМ - Огонь | Q/1/2 - Смена оружия | ESC - Меню
+    </div>
+
+    <div id="game-over">
+        <div class="game-over-title" id="game-over-title">ПОБЕДА</div>
+        <div style="font-size: 1.5em; margin-bottom: 30px;" id="game-over-stats"></div>
+        <button class="menu-btn" id="restart-btn">ЗАНОВО</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+    // --- GAME ENGINE & LOGIC ---
+
+    // Game State
+    const GameState = {
+        scene: null,
+        camera: null,
+        renderer: null,
+        player: {
+            height: 1.7,
+            moveSpeed: 5,
+            lookSpeed: 0.002,
+            health: 100,
+            maxHealth: 100,
+            position: new THREE.Vector3(0, 1.7, 0),
+            rotation: { x: 0, y: 0 }
+        },
+        weapons: {
+            current: 'light',
+            light: {
+                name: 'Световой Эмиттер',
+                ammo: 30, maxAmmo: 30,
+                damage: 0,
+                reloadTime: 1500, fireRate: 200, lastFire: 0,
+                projectileSpeed: 40, color: 0xffff00
+            },
+            dark: {
+                name: 'Поглотитель Тьмы',
+                ammo: 20, maxAmmo: 20,
+                damage: 35,
+                reloadTime: 2000, fireRate: 300, lastFire: 0,
+                projectileSpeed: 100, color: 0x8000ff
+            }
+        },
+        enemies: [],
+        projectiles: [],
+        lights: [],
+        collidableObjects: [],
+        walls: [],
+        activeShadows: [],
+        wave: 1,
+        enemiesKilled: 0,
+        isPlaying: false,
+        isPaused: true,
+        isReloading: false,
+        mouseMovement: { x: 0, y: 0 },
+        keys: {},
+        clock: new THREE.Clock()
+    };
+
+    // DOM Elements
+    const dom = {
+        menu: document.getElementById('menu'),
+        healthFill: document.getElementById('health-fill'),
+        enemyCount: document.getElementById('enemy-count'),
+        waveCount: document.getElementById('wave-count'),
+        weaponName: document.getElementById('weapon-name'),
+        ammoCount: document.getElementById('ammo-count'),
+        ammoMax: document.getElementById('ammo-max'),
+        reloadHint: document.getElementById('reload-hint'),
+        canvas: document.getElementById('canvas'),
+        gameOver: document.getElementById('game-over'),
+        gameOverTitle: document.getElementById('game-over-title'),
+        gameOverStats: document.getElementById('game-over-stats'),
+        startBtn: document.getElementById('start-btn'),
+        restartBtn: document.getElementById('restart-btn')
+    };
+
+    // --- INITIALIZATION ---
+
+    function init() {
+        GameState.renderer = new THREE.WebGLRenderer({ canvas: dom.canvas, antialias: true });
+        GameState.renderer.setSize(window.innerWidth, window.innerHeight);
+        GameState.renderer.shadowMap.enabled = true;
+        GameState.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        GameState.scene = new THREE.Scene();
+        GameState.scene.fog = new THREE.Fog(0x000020, 1, 40);
+
+        GameState.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        GameState.camera.position.copy(GameState.player.position);
+
+        createEnvironment();
+        setupEventListeners();
+
+        dom.startBtn.addEventListener('click', startGame);
+        dom.restartBtn.addEventListener('click', restartGame);
+
+        switchWeapon(GameState.weapons.current);
+        updateAmmoDisplay();
+        animate();
+    }
+
+    function createEnvironment() {
+        // Ground
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8, metalness: 0.2 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        GameState.scene.add(ground);
+
+        // Walls
+        createWalls();
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.3);
+        GameState.scene.add(ambientLight);
+        createOverheadLights();
+        // Obstacles
+        createObstacles();
+    }
+
+    function createWalls() {
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a40, roughness: 0.9 });
+        const h = 5, sz = 40, th = 1;
+
+        // Стены: Север, Юг, Восток, Запад
+        const configs = [
+            { dim: [sz, h, th], pos: [0, h/2, -sz/2] },
+            { dim: [sz, h, th], pos: [0, h/2, sz/2] },
+            { dim: [th, h, sz], pos: [sz/2, h/2, 0] },
+            { dim: [th, h, sz], pos: [-sz/2, h/2, 0] }
+        ];
+
+        configs.forEach(c => {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(...c.dim), wallMat);
+            wall.position.set(...c.pos);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            wall.userData = { isWall: true };
+            GameState.scene.add(wall);
+            GameState.collidableObjects.push(wall);
+            GameState.walls.push(wall);
+        });
+    }
+
+    function createOverheadLights() {
+        const positions = [{x:-10,z:-10}, {x:10,z:-10}, {x:-10,z:10}, {x:10,z:10}, {x:0,z:0}];
+        positions.forEach(p => {
+            const light = new THREE.PointLight(0xffffff, 0.5, 30);
+            light.position.set(p.x, 8, p.z);
+            light.castShadow = true;
+            GameState.scene.add(light);
+
+            const lamp = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0xffffaa })
+            );
+            lamp.position.copy(light.position);
+            GameState.scene.add(lamp);
+        });
+    }
+
+    function createObstacles() {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x3a3a5a, roughness: 0.7 });
+        const data = [
+            {x:-8, z:0, s:[2,3,2]}, {x:8, z:0, s:[2,3,2]},
+            {x:0, z:-8, s:[2,3,2]}, {x:0, z:8, s:[2,3,2]},
+            {x:-15, z:-15, s:[3,2,3]}, {x:15, z:15, s:[3,2,3]}
+        ];
+        data.forEach(d => {
+            const obs = new THREE.Mesh(new THREE.BoxGeometry(...d.s), mat);
+            obs.position.set(d.x, d.s[1]/2, d.z);
+            obs.castShadow = true;
+            obs.receiveShadow = true;
+            obs.userData = { isWall: true };
+            GameState.scene.add(obs);
+            GameState.collidableObjects.push(obs);
+            GameState.walls.push(obs);
+        });
+    }
+
+    // --- GAME LOGIC ---
+
+    function spawnEnemy() {
+        let pos;
+        let validPosition = false;
+        let attempts = 0;
+        const enemyRadius = 0.5;
+
+        // Попытка найти свободное место
+        while (!validPosition && attempts < 20) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 15 + Math.random() * 15;
+            pos = new THREE.Vector3(Math.cos(angle)*dist, 1, Math.sin(angle)*dist);
+
+            validPosition = true;
+
+            // Создаем сферу в точке спавна для проверки коллизий
+            const spawnSphere = new THREE.Sphere(pos, enemyRadius + 0.2); // +0.2 для запаса
+            const box = new THREE.Box3();
+
+            for (let obj of GameState.collidableObjects) {
+                box.setFromObject(obj);
+                if (box.intersectsSphere(spawnSphere)) {
+                    validPosition = false;
+                    break;
+                }
+            }
+            attempts++;
+        }
+
+        // Если за 20 попыток не нашли место, отменяем спавн
+        if (!validPosition) return;
+
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0x330000, emissiveIntensity: 0.5 });
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xff6666, emissive: 0x440000, emissiveIntensity: 0.3 });
+
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2, 16), bodyMat);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), headMat);
+
+        body.position.copy(pos);
+        head.position.set(pos.x, 2.2, pos.z);
+
+        body.castShadow = true; body.receiveShadow = true;
+        head.castShadow = true;
+
+        GameState.scene.add(body);
+        GameState.scene.add(head);
+
+        const enemy = {
+            body, head,
+            health: 50 + GameState.wave * 10,
+            maxHealth: 50 + GameState.wave * 10,
+            speed: 1.5 + GameState.wave * 0.2,
+            damage: 10 + GameState.wave * 2,
+            lastAttack: 0, attackCooldown: 2000,
+            radius: 0.5,
+            shadowProjection: null,
+            isShadowStolen: false
+        };
+
+        body.userData = { isEnemy: true, ref: enemy };
+        head.userData = { isEnemy: true, ref: enemy };
+
+        GameState.enemies.push(enemy);
+        updateEnemyCount();
+    }
+
+    function fire() {
+        const now = Date.now();
+        const weapon = GameState.weapons[GameState.weapons.current];
+
+        if (now - weapon.lastFire < weapon.fireRate) return;
+        if (weapon.ammo <= 0 || GameState.isReloading) { reload(); return; }
+
+        weapon.lastFire = now;
+        weapon.ammo--;
+        updateAmmoDisplay();
+
+        const dir = new THREE.Vector3();
+        GameState.camera.getWorldDirection(dir);
+
+        createProjectile(GameState.camera.position.clone(), dir, weapon);
+
+        if (weapon.ammo === 0) setTimeout(reload, 100);
+    }
+
+    function createProjectile(pos, dir, weapon) {
+        const geom = new THREE.SphereGeometry(0.1, 8, 8);
+        const mat = new THREE.MeshBasicMaterial({ color: weapon.color });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.copy(pos);
+
+        const glow = new THREE.Mesh(
+            new THREE.SphereGeometry(0.25, 8, 8),
+            new THREE.MeshBasicMaterial({ color: weapon.color, transparent: true, opacity: 0.4 })
+        );
+        mesh.add(glow);
+        GameState.scene.add(mesh);
+
+        GameState.projectiles.push({
+            mesh: mesh,
+            velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
+            type: GameState.weapons.current,
+            damage: weapon.damage,
+            lifetime: 2000,
+            createdAt: Date.now()
+        });
+    }
+
+    function updateProjectiles(delta) {
+        const now = Date.now();
+        const raycaster = new THREE.Raycaster();
+
+        GameState.projectiles = GameState.projectiles.filter(proj => {
+            if (now - proj.createdAt > proj.lifetime) {
+                GameState.scene.remove(proj.mesh);
+                return false;
+            }
+
+            const prevPos = proj.mesh.position.clone();
+            proj.mesh.position.add(proj.velocity.clone().multiplyScalar(delta));
+
+            const dir = proj.velocity.clone().normalize();
+            const dist = prevPos.distanceTo(proj.mesh.position);
+            raycaster.set(prevPos, dir);
+            raycaster.far = dist;
+
+            let checkList = [...GameState.collidableObjects];
+
+            if (proj.type === 'light') {
+                GameState.enemies.forEach(e => {
+                    if(!e.isDead) {
+                        checkList.push(e.body);
+                        checkList.push(e.head);
+                    }
+                });
+            }
+
+            if (proj.type === 'dark') {
+                // Важно: проверяем пересечение с мешем тени или её кольцом
+                GameState.activeShadows.forEach(s => checkList.push(s.mesh));
+            }
+
+            const intersects = raycaster.intersectObjects(checkList, true); // true для рекурсивной проверки детей (кольца)
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+
+                // Находим корневой объект, если попали в child (например, в кольцо)
+                let obj = hit.object;
+                while(obj.parent && !obj.userData.isShadowProjection && !obj.userData.isEnemy && !obj.userData.isWall) {
+                    obj = obj.parent;
+                }
+
+                if (proj.type === 'light') {
+                    if (obj.userData.isEnemy) {
+                        projectShadowToWall(obj.userData.ref);
+                    }
+                } else if (proj.type === 'dark') {
+                    if (obj.userData.isShadowProjection) {
+                        damageEnemyThroughShadow(obj.userData.owner, proj.damage, obj);
+                    }
+                }
+
+                GameState.scene.remove(proj.mesh);
+                return false;
+            }
+
+            if (Math.abs(proj.mesh.position.x) > 60 || Math.abs(proj.mesh.position.z) > 60) {
+                GameState.scene.remove(proj.mesh);
+                return false;
+            }
+            return true;
+        });
+    }
+
+    function projectShadowToWall(enemy) {
+        if (enemy.isShadowStolen) return;
+
+        const dirToEnemy = new THREE.Vector3().subVectors(enemy.body.position, GameState.camera.position).normalize();
+
+        const raycaster = new THREE.Raycaster(enemy.body.position, dirToEnemy);
+        const intersects = raycaster.intersectObjects(GameState.walls);
+
+        if (intersects.length > 0) {
+            const hit = intersects[0];
+            if (hit.distance < 25) {
+                createShadowDecal(hit.point, hit.face.normal, enemy);
+
+                enemy.isShadowStolen = true;
+                enemy.body.castShadow = false;
+                enemy.head.castShadow = false;
+
+                enemy.body.material.transparent = true;
+                enemy.body.material.opacity = 0.5;
+                enemy.body.material.color.set(0x555555);
+                enemy.body.material.emissive.set(0x222222);
+
+                enemy.head.material.transparent = true;
+                enemy.head.material.opacity = 0.5;
+                enemy.head.material.color.set(0x555555);
+            }
+        }
+    }
+
+    function createShadowDecal(point, normal, enemy) {
+        // 1. Увеличенный размер тени
+        const shadowGeo = new THREE.CircleGeometry(2.0, 32);
+        // 2. Абсолютно черный цвет, непрозрачный центр
+        const shadowMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            side: THREE.DoubleSide,
+            depthTest: false // Рисуем поверх стены принудительно
+        });
+
+        const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+
+        // Смещение от стены, чтобы не мерцало
+        shadowMesh.position.copy(point).add(normal.clone().multiplyScalar(0.1));
+        shadowMesh.lookAt(point.clone().add(normal));
+
+        // 3. Добавляем ЯРКОЕ ФИОЛЕТОВОЕ КОЛЬЦО
+        const ringGeo = new THREE.RingGeometry(2.0, 2.3, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xaa00ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.8,
+            depthTest: false
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        shadowMesh.add(ringMesh);
+
+        // Данные для логики
+        shadowMesh.userData = {
+            isShadowProjection: true,
+            owner: enemy
+        };
+
+        // Принудительный рендер поверх всего
+        shadowMesh.renderOrder = 999;
+
+        GameState.scene.add(shadowMesh);
+
+        const shadowData = { mesh: shadowMesh, owner: enemy, ring: ringMesh, time: 0 };
+        GameState.activeShadows.push(shadowData);
+        enemy.shadowProjection = shadowData;
+    }
+
+    function damageEnemyThroughShadow(enemy, damage, shadowMeshObj) {
+        if (enemy.isDead) return;
+
+        // Эффект попадания по тени
+        const flash = new THREE.Mesh(
+            new THREE.CircleGeometry(2.2, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthTest: false })
+        );
+        flash.position.copy(shadowMeshObj.position).add(new THREE.Vector3(0,0,0.05));
+        flash.rotation.copy(shadowMeshObj.rotation);
+        flash.renderOrder = 1000;
+        GameState.scene.add(flash);
+        setTimeout(() => GameState.scene.remove(flash), 100);
+
+        enemy.health -= damage;
+
+        enemy.body.material.emissive.set(0xff0000);
+        setTimeout(() => {
+            if (!enemy.isDead) enemy.body.material.emissive.set(0x222222);
+        }, 100);
+
+        if (enemy.health <= 0) {
+            killEnemy(enemy);
+        }
+    }
+
+    function killEnemy(enemy) {
+        enemy.isDead = true;
+        GameState.enemiesKilled++;
+
+        if (enemy.shadowProjection) {
+            GameState.scene.remove(enemy.shadowProjection.mesh);
+            GameState.activeShadows = GameState.activeShadows.filter(s => s !== enemy.shadowProjection);
+        }
+
+        const interval = setInterval(() => {
+            if (!enemy.body) return;
+            enemy.body.scale.multiplyScalar(0.9);
+            enemy.head.scale.multiplyScalar(0.9);
+            if (enemy.body.scale.x < 0.1) {
+                clearInterval(interval);
+                GameState.scene.remove(enemy.body);
+                GameState.scene.remove(enemy.head);
+                GameState.enemies = GameState.enemies.filter(e => e !== enemy);
+                updateEnemyCount();
+                checkWaveComplete();
+            }
+        }, 50);
+    }
+
+    // --- PLAYER & SYSTEM ---
+
+    function updatePlayer(delta) {
+        GameState.player.rotation.y -= GameState.mouseMovement.x * GameState.player.lookSpeed;
+        GameState.player.rotation.x -= GameState.mouseMovement.y * GameState.player.lookSpeed;
+        GameState.player.rotation.x = Math.max(-1.5, Math.min(1.5, GameState.player.rotation.x));
+
+        GameState.camera.rotation.set(GameState.player.rotation.x, GameState.player.rotation.y, 0, 'YXZ');
+        GameState.mouseMovement = {x:0, y:0};
+
+        const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(GameState.camera.quaternion);
+        const rgt = new THREE.Vector3(1,0,0).applyQuaternion(GameState.camera.quaternion);
+        fwd.y = 0; rgt.y = 0; fwd.normalize(); rgt.normalize();
+
+        const move = new THREE.Vector3();
+        if (GameState.keys['KeyW']) move.add(fwd);
+        if (GameState.keys['KeyS']) move.sub(fwd);
+        if (GameState.keys['KeyD']) move.add(rgt);
+        if (GameState.keys['KeyA']) move.sub(rgt);
+
+        if (move.length() > 0) {
+            move.normalize().multiplyScalar(GameState.player.moveSpeed * delta);
+            const nextPos = GameState.player.position.clone().add(move);
+
+            if (!checkCollision(nextPos)) {
+                GameState.player.position.copy(nextPos);
+            } else {
+                if (!checkCollision(new THREE.Vector3(nextPos.x, 1.7, GameState.player.position.z)))
+                    GameState.player.position.x = nextPos.x;
+                else if (!checkCollision(new THREE.Vector3(GameState.player.position.x, 1.7, nextPos.z)))
+                    GameState.player.position.z = nextPos.z;
+            }
+        }
+
+        GameState.player.position.x = Math.max(-18, Math.min(18, GameState.player.position.x));
+        GameState.player.position.z = Math.max(-18, Math.min(18, GameState.player.position.z));
+
+        GameState.camera.position.copy(GameState.player.position);
+    }
+
+    function checkCollision(pos) {
+        const playerSphere = new THREE.Sphere(pos, 0.5);
+        const box = new THREE.Box3();
+        for (let obj of GameState.collidableObjects) {
+            box.setFromObject(obj);
+            if (box.intersectsSphere(playerSphere)) return true;
+        }
+        return false;
+    }
+
+    function updateEnemies(delta) {
+        const now = Date.now();
+        const pPos = GameState.player.position;
+
+        // Анимация пульсации теней
+        GameState.activeShadows.forEach(shadow => {
+            shadow.time += delta * 5;
+            const scale = 1 + Math.sin(shadow.time) * 0.1; // Пульсация от 0.9 до 1.1
+            shadow.mesh.scale.set(scale, scale, scale);
+        });
+
+        GameState.enemies.forEach(enemy => {
+            if (enemy.isDead) return;
+
+            const ePos = enemy.body.position;
+            const dist = ePos.distanceTo(pPos);
+            const currentSpeed = enemy.isShadowStolen ? enemy.speed * 0.5 : enemy.speed;
+
+            if (dist > 2) {
+                const dir = new THREE.Vector3().subVectors(pPos, ePos).normalize();
+                dir.y = 0;
+                const nextPos = ePos.clone().add(dir.multiplyScalar(currentSpeed * delta));
+
+                let collided = false;
+                GameState.collidableObjects.forEach(obj => {
+                    const box = new THREE.Box3().setFromObject(obj);
+                    if (box.intersectsSphere(new THREE.Sphere(nextPos, 0.5))) collided = true;
+                });
+
+                if (!collided) ePos.copy(nextPos);
+
+                enemy.head.position.set(ePos.x, ePos.y + 1.2, ePos.z);
+                enemy.body.lookAt(pPos.x, ePos.y, pPos.z);
+                enemy.head.lookAt(pPos.x, ePos.y + 1.2, pPos.z);
+            } else {
+                if (now - enemy.lastAttack > enemy.attackCooldown) {
+                    enemy.lastAttack = now;
+                    damagePlayer(enemy.damage);
+                }
+            }
+        });
+    }
+
+    function damagePlayer(amount) {
+        GameState.player.health = Math.max(0, GameState.player.health - amount);
+        dom.healthFill.style.width = (GameState.player.health / GameState.player.maxHealth * 100) + '%';
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,0,0,0.3);z-index:90;pointer-events:none;';
+        document.body.appendChild(overlay);
+        setTimeout(() => overlay.remove(), 100);
+
+        if (GameState.player.health <= 0) gameOver(false);
+    }
+
+    // --- UTILS ---
+    function switchWeapon(type) {
+        GameState.weapons.current = type;
+        const w = GameState.weapons[type];
+        dom.weaponName.textContent = w.name;
+        dom.weaponName.className = 'weapon-name weapon-' + type;
+        updateAmmoDisplay();
+    }
+
+    function reload() {
+        if (GameState.isReloading) return;
+        const w = GameState.weapons[GameState.weapons.current];
+        if (w.ammo === w.maxAmmo) return;
+
+        GameState.isReloading = true;
+        dom.reloadHint.style.display = 'block';
+
+        setTimeout(() => {
+            w.ammo = w.maxAmmo;
+            GameState.isReloading = false;
+            dom.reloadHint.style.display = 'none';
+            updateAmmoDisplay();
+        }, w.reloadTime);
+    }
+
+    function updateAmmoDisplay() {
+        const w = GameState.weapons[GameState.weapons.current];
+        dom.ammoCount.textContent = w.ammo;
+        dom.ammoMax.textContent = w.maxAmmo;
+        dom.ammoCount.style.color = w.ammo === 0 ? '#f00' : '#fff';
+    }
+
+    function updateEnemyCount() { dom.enemyCount.textContent = GameState.enemies.length; }
+
+    function checkWaveComplete() {
+        if (GameState.enemies.length === 0 && GameState.isPlaying) {
+            GameState.wave++;
+            dom.waveCount.textContent = GameState.wave;
+
+            GameState.player.health = Math.min(100, GameState.player.health + 20);
+            dom.healthFill.style.width = (GameState.player.health) + '%';
+
+            if (GameState.wave > 5) { gameOver(true); return; }
+            setTimeout(startWave, 2000);
+        }
+    }
+
+    function startWave() {
+        const cnt = 3 + GameState.wave;
+        for(let i=0; i<cnt; i++) setTimeout(spawnEnemy, i*600);
+    }
+
+    function startGame() {
+        dom.menu.classList.add('hidden');
+        dom.gameOver.classList.remove('show');
+        GameState.isPlaying = true;
+        GameState.isPaused = false;
+        dom.canvas.requestPointerLock();
+
+        if (GameState.enemies.length === 0) startWave();
+    }
+
+    function restartGame() {
+        GameState.enemies.forEach(e => {
+            GameState.scene.remove(e.body);
+            GameState.scene.remove(e.head);
+        });
+        GameState.activeShadows.forEach(s => GameState.scene.remove(s.mesh));
+        GameState.enemies = [];
+        GameState.activeShadows = [];
+
+        GameState.wave = 1;
+        GameState.enemiesKilled = 0;
+        GameState.player.health = 100;
+        GameState.player.position.set(0,1.7,0);
+        GameState.weapons.light.ammo = 30;
+        GameState.weapons.dark.ammo = 20;
+
+        dom.waveCount.textContent = 1;
+        dom.healthFill.style.width = '100%';
+        updateEnemyCount();
+        startGame();
+    }
+
+    function gameOver(win) {
+        GameState.isPlaying = false;
+        document.exitPointerLock();
+        dom.gameOver.classList.add('show');
+        dom.gameOverTitle.textContent = win ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
+        dom.gameOverTitle.className = win ? 'game-over-title victory' : 'game-over-title defeat';
+        dom.gameOverStats.innerHTML = `Волн: ${GameState.wave}<br>Убито: ${GameState.enemiesKilled}`;
+    }
+
+    function setupEventListeners() {
+        document.addEventListener('mousemove', e => {
+            if (!GameState.isPaused) {
+                GameState.mouseMovement.x += e.movementX;
+                GameState.mouseMovement.y += e.movementY;
+            }
+        });
+        document.addEventListener('mousedown', e => {
+            if (GameState.isPlaying && !GameState.isPaused && e.button === 0) fire();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Escape') {
+                GameState.isPaused = !GameState.isPaused;
+                if (GameState.isPaused) {
+                    dom.menu.classList.remove('hidden');
+                    document.exitPointerLock();
+                } else {
+                    dom.menu.classList.add('hidden');
+                    dom.canvas.requestPointerLock();
+                }
+            }
+            if (['KeyW','KeyS','KeyA','KeyD'].includes(e.code)) GameState.keys[e.code] = true;
+            if (e.code === 'KeyQ' || e.code === 'Digit1') switchWeapon('light');
+            if (e.code === 'Digit2') switchWeapon('dark');
+        });
+        document.addEventListener('keyup', e => GameState.keys[e.code] = false);
+        window.addEventListener('resize', () => {
+            GameState.camera.aspect = window.innerWidth / window.innerHeight;
+            GameState.camera.updateProjectionMatrix();
+            GameState.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        dom.canvas.addEventListener('click', () => {
+            if (GameState.isPlaying && !GameState.isPaused) dom.canvas.requestPointerLock();
+        });
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const delta = GameState.clock.getDelta();
+        if (GameState.isPlaying && !GameState.isPaused) {
+            updatePlayer(delta);
+            updateEnemies(delta);
+            updateProjectiles(delta);
+        }
+        GameState.renderer.render(GameState.scene, GameState.camera);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
